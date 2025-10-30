@@ -1,0 +1,11 @@
+*env
+
+__pycache__
+
+# F1 Project Specific
+# Ignore the large FastF1 cache directory
+fastf1_cache/
+
+# Ignore the precomputed database file
+strategy_database.pkl
+*.pkl

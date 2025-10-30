@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F1 Strategy Simulator</title>
+    <!-- Include Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Include Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js plugin for datalabels (optional but nice) -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Custom styles for Chart.js tooltips */
+        .chartjs-tooltip {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .chartjs-tooltip-key {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 font-sans antialiased">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-5xl">
+
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-white mb-2">F1 Strategy Simulator</h1>
+            <p class="text-lg md:text-xl text-cyan-400">Predict the Optimal Race Strategy</p>
+        </header>
+
+        <!-- Simulation Form -->
+        <div class="bg-gray-800 shadow-xl rounded-lg p-6 md:p-8 mb-8">
+            <form id="simulation-form" class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                
+                <!-- Driver Selection -->
+                <div>
+                    <label for="driver_name" class="block text-sm font-medium text-gray-300 mb-2">Driver</label>
+                    <select id="driver_name" name="driver_name" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
+                        <option value="" disabled selected>Loading drivers...</option>
+                    </select>
+                </div>
+
+                <!-- Race Selection -->
+                <div>
+                    <label for="race_name" class="block text-sm font-medium text-gray-300 mb-2">Race</label>
+                    <select id="race_name" name="race_name" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
+                        <option value="" disabled selected>Loading races...</option>
+                    </select>
+                </div>
+
+                <!-- Pit Stop Loss -->
+                <div>
+                    <label for="pit_stop_loss" class="block text-sm font-medium text-gray-300 mb-2">Pit Stop Loss (s)</label>
+                    <input type="number" id="pit_stop_loss" name="pit_stop_loss" value="22" step="0.1" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
+                </div>
+
+                <!-- Total Laps (Read-only) -->
+                <div>
+                    <label for="total_laps_input" class="block text-sm font-medium text-gray-300 mb-2">Total Laps</label>
+                    <input type="text" id="total_laps_input" name="total_laps_input" value="N/A" readonly class="w-full bg-gray-600 border border-gray-500 text-gray-300 rounded-md p-3 cursor-not-allowed">
+                </div>
+
+                <!-- Submit Button -->
+                <div class="md:col-span-4 mt-4">
+                    <button type="submit" id="run-simulation-btn" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-6 rounded-md text-lg transition duration-300 ease-in-out flex items-center justify-center">
+                        <span id="btn-text">Run Simulation</span>
+                        <!-- Loading Spinner -->
+                        <svg id="loading-spinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Error Display -->
+        <div id="error-display" class="bg-red-800 border-l-4 border-red-400 text-red-100 p-4 rounded-md mb-8 hidden" role="alert">
+            <p class="font-bold">Error</p>
+            <p id="error-text">Something went wrong.</p>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results-section" class="hidden">
+            <!-- Summary of Top 3 -->
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold text-white mb-4">Top Strategies</h2>
+                <div id="results-summary" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Results will be injected here by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Visualization -->
+            <div>
+                <h2 class="text-3xl font-bold text-white mb-4">Strategy Visualization</h2>
+                <div class="bg-gray-800 shadow-lg rounded-lg p-4 md:p-6">
+                    <canvas id="strategy-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Globals ---
+        const API_BASE_URL = 'http://127.0.0.1:8000';
+        const formEl = document.getElementById('simulation-form');
+        const driverSelectEl = document.getElementById('driver_name');
+        const raceSelectEl = document.getElementById('race_name');
+        const pitLossEl = document.getElementById('pit_stop_loss');
+        const totalLapsEl = document.getElementById('total_laps_input');
+        
+        const resultsSectionEl = document.getElementById('results-section');
+        const resultsSummaryEl = document.getElementById('results-summary');
+        const errorEl = document.getElementById('error-display');
+        const errorTextEl = document.getElementById('error-text');
+        
+        const runBtn = document.getElementById('run-simulation-btn');
+        const btnText = document.getElementById('btn-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        
+        let strategyChart = null; // To hold the Chart.js instance
+
+        // --- Event Listeners ---
+        
+        // Run on page load
+        document.addEventListener('DOMContentLoaded', loadDropdownData);
+        
+        // Run on form submit
+        formEl.addEventListener('submit', handleSimulationSubmit);
+        
+        // Run on race selection change
+        raceSelectEl.addEventListener('change', handleRaceChange);
+
+
+        // --- Functions ---
+
+        /**
+         * Fetches Drivers and Races from the API to populate dropdowns
+         */
+        async function loadDropdownData() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api-data`);
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
+                const data = await response.json();
+
+                // Populate Drivers
+                driverSelectEl.innerHTML = '<option value="" disabled>Select a driver...</option>'; // Clear "loading"
+                if (data.drivers && data.drivers.length > 0) {
+                    data.drivers.forEach(driver => {
+                        const option = document.createElement('option');
+                        option.value = driver;
+                        option.textContent = driver;
+                        driverSelectEl.appendChild(option);
+                    });
+                    // Set default driver
+                    driverSelectEl.value = data.drivers.includes('VER') ? 'VER' : data.drivers[0];
+                } else {
+                    driverSelectEl.innerHTML = '<option value="" disabled selected>No drivers found</option>';
+                }
+
+                // Populate Races
+                raceSelectEl.innerHTML = '<option value="" disabled>Select a race...</option>'; // Clear "loading"
+                if (data.races && data.races.length > 0) {
+                    data.races.forEach(race => {
+                        const option = document.createElement('option');
+                        option.value = race;
+                        option.textContent = race;
+                        raceSelectEl.appendChild(option);
+                    });
+                    // Set default race to the first in the list
+                    raceSelectEl.value = data.races[0];
+                } else {
+                     raceSelectEl.innerHTML = '<option value="" disabled selected>No races found</option>';
+                }
+                
+                // After populating, trigger the lap count fetch for the default race
+                await handleRaceChange();
+
+            } catch (err) {
+                console.error(err);
+                showError('Could not load initial data. Is the API server running?');
+                driverSelectEl.innerHTML = '<option value="" disabled selected>Error loading</option>';
+                raceSelectEl.innerHTML = '<option value="" disabled selected>Error loading</option>';
+            }
+        }
+
+        /**
+         * Called when the race dropdown changes. Fetches total laps for that race.
+         */
+        async function handleRaceChange() {
+            const selectedRace = raceSelectEl.value;
+            if (!selectedRace) {
+                totalLapsEl.value = 'N/A';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/get-laps/${encodeURIComponent(selectedRace)}`);
+                if (!response.ok) {
+                    throw new Error(`Could not find laps for ${selectedRace}`);
+                }
+                const data = await response.json();
+                totalLapsEl.value = data.total_laps || 'N/A';
+            } catch (err) {
+                console.error(err);
+                totalLapsEl.value = 'Error';
+                showError(err.message);
+            }
+        }
+
+        /**
+         * Handles the main form submission
+         */
+        async function handleSimulationSubmit(e) {
+            e.preventDefault(); // Stop form from reloading the page
+            
+            // Get form values
+            const driverName = driverSelectEl.value;
+            const raceName = raceSelectEl.value;
+            const pitStopLoss = parseFloat(pitLossEl.value);
+
+            if (!driverName || !raceName) {
+                showError('Please select a driver and a race.');
+                return;
+            }
+
+            // --- UI: Set loading state ---
+            setLoading(true);
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/simulate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        driver_name: driverName,
+                        race_name: raceName,
+                        pit_stop_loss: pitStopLoss,
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Simulation failed.');
+                }
+                
+                // --- Success: Display results ---
+                displayResults(data);
+
+            } catch (err) {
+                console.error(err);
+                showError(err.message);
+            } finally {
+                // --- UI: Unset loading state ---
+                setLoading(false);
+            }
+        }
+        
+        /**
+         * Displays the results from the API
+         */
+        function displayResults(data) {
+            // 1. Clear old results and show section
+            resultsSummaryEl.innerHTML = '';
+            resultsSectionEl.style.display = 'block';
+
+            // 2. Populate Top 3 Results
+            data.top_3_results.forEach((result, index) => {
+                const isOptimal = index === 0;
+                const card = document.createElement('div');
+                card.className = `p-4 rounded-lg shadow-lg ${isOptimal ? 'bg-gray-700 border-2 border-cyan-400' : 'bg-gray-700'}`;
+                
+                card.innerHTML = `
+                    <h3 class="text-xl font-bold ${isOptimal ? 'text-cyan-400' : 'text-white'}">${result.name} <span class="text-lg font-medium text-yellow-400">${result.delta_str}</span></h3>
+                    <p class="text-gray-300 text-sm mt-1">${result.pit_stops_text}</p>
+                    <p class="text-gray-300 text-sm">Total Time: ${result.total_time_str}</p>
+                `;
+                resultsSummaryEl.appendChild(card);
+            });
+
+            // 3. Render Visualization
+            renderChart(data.visualization_data);
+        }
+
+        /**
+         * Renders the strategy bar chart using Chart.js
+         */
+        function renderChart(vizData) {
+            const ctx = document.getElementById('strategy-chart').getContext('2d');
+            
+            const tyreColors = {
+                'SOFT': 'rgba(255, 51, 51, 0.8)',
+                'MEDIUM': 'rgba(255, 243, 51, 0.8)',
+                'HARD': 'rgba(235, 235, 235, 0.8)',
+            };
+            const tyreBorderColors = {
+                'SOFT': 'rgba(255, 51, 51, 1)',
+                'MEDIUM': 'rgba(255, 243, 51, 1)',
+                'HARD': 'rgba(235, 235, 235, 1)',
+            };
+
+            // Prepare data for Chart.js
+            const labels = vizData.map(d => d.name);
+            const datasets = [];
+            
+            // Find max number of stints to create enough datasets
+            const maxStints = Math.max(...vizData.map(d => d.stints.length));
+
+            for (let i = 0; i < maxStints; i++) {
+                datasets.push({
+                    label: `Stint ${i + 1}`,
+                    data: vizData.map(d => (d.stints[i] ? d.stints[i].laps : 0)),
+                    backgroundColor: vizData.map(d => (d.stints[i] ? tyreColors[d.stints[i].compound] : 'transparent')),
+                    borderColor: vizData.map(d => (d.stints[i] ? tyreBorderColors[d.stints[i].compound] : 'transparent')),
+                    borderWidth: 1,
+                    // Store compound info for the tooltip
+                    compounds: vizData.map(d => (d.stints[i] ? d.stints[i].compound : null)),
+                });
+            }
+
+            // Destroy old chart if it exists
+            if (strategyChart) {
+                strategyChart.destroy();
+            }
+
+            // Create new chart
+            strategyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                plugins: [ChartDataLabels],
+                options: {
+                    indexAxis: 'y', // Horizontal bar chart
+                    responsive: true,
+                    scales: {
+                        x: {
+                            stacked: true,
+                            title: {
+                                display: true,
+                                text: 'Lap Number',
+                                color: 'white',
+                                font: { size: 14 }
+                            },
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: {
+                            stacked: true,
+                            ticks: { color: 'white', font: { size: 14, weight: 'bold' } },
+                            grid: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false // We don't need a legend per stint
+                        },
+                        tooltip: {
+                            enabled: false,
+                            external: (context) => {
+                                // Custom tooltip HTML
+                                const tooltipModel = context.tooltip;
+                                let tooltipEl = document.getElementById('chartjs-tooltip');
+
+                                if (!tooltipEl) {
+                                    tooltipEl = document.createElement('div');
+                                    tooltipEl.id = 'chartjs-tooltip';
+                                    tooltipEl.className = 'chartjs-tooltip';
+                                    document.body.appendChild(tooltipEl);
+                                }
+
+                                if (tooltipModel.opacity === 0) {
+                                    tooltipEl.style.opacity = 0;
+                                    return;
+                                }
+
+                                const dataPoint = tooltipModel.dataPoints[0];
+                                const dataset = context.chart.data.datasets[dataPoint.datasetIndex];
+                                const compound = dataset.compounds[dataPoint.dataIndex];
+                                const laps = dataPoint.raw;
+
+                                if (!compound) return;
+
+                                const color = dataset.backgroundColor[dataPoint.dataIndex];
+
+                                tooltipEl.innerHTML = `
+                                    <span class="chartjs-tooltip-key" style="background-color: ${color}; border: 1px solid ${color}"></span>
+                                    ${compound} Tyre: ${laps} Laps
+                                `;
+
+                                const position = context.chart.canvas.getBoundingClientRect();
+                                tooltipEl.style.opacity = 1;
+                                tooltipEl.style.position = 'absolute';
+                                tooltipEl.style.left = position.left + window.pageXOffset + tooltipModel.caretX + 'px';
+                                tooltipEl.style.top = position.top + window.pageYOffset + tooltipModel.caretY + 'px';
+                                tooltipEl.style.pointerEvents = 'none';
+                            }
+                        },
+                        datalabels: {
+                            color: 'black',
+                            font: {
+                                weight: 'bold'
+                            },
+                            formatter: (value, context) => {
+                                // Show compound abbreviation inside the bar
+                                const dataset = context.chart.data.datasets[context.datasetIndex];
+                                const compound = dataset.compounds[context.dataIndex];
+                                return compound ? compound[0] : ''; // S, M, H
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Shows the error display
+         */
+        function showError(message) {
+            errorTextEl.textContent = message;
+            errorEl.style.display = 'block';
+            resultsSectionEl.style.display = 'none'; // Hide old results
+        }
+
+        /**
+         * Sets the loading state of the submit button
+         */
+        function setLoading(isLoading) {
+            if (isLoading) {
+                runBtn.disabled = true;
+                runBtn.classList.add('opacity-75', 'cursor-not-allowed');
+                btnText.textContent = 'Simulating...';
+                loadingSpinner.style.display = 'block';
+                errorEl.style.display = 'none'; // Hide old errors
+            } else {
+                runBtn.disabled = false;
+                runBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+                btnText.textContent = 'Run Simulation';
+                loadingSpinner.style.display = 'none';
+            }
+        }
+
+    </script>
+</body>
+</html>
+
