@@ -165,10 +165,14 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
     print(f"  - Driver Pace Delta: {avg_lap_delta:+.3f}s")
     print(f"  - Final Degradation Rates (s/lap): {final_degradation_rates}\n")
 
-    # Initialize advanced analyzer
+    # Initialize advanced analyzer with fuel modeling
+    from advanced_analysis import FuelModel
+    fuel_model = FuelModel(max_fuel=110.0, fuel_map='BALANCED')
     analyzer = AdvancedStrategyAnalyzer(
         driver_data={'delta': avg_lap_delta},
-        track_data=track_data
+        track_data=track_data,
+        fuel_model=fuel_model,
+        include_fuel_weight=True
     )
 
     simulation_results = {}
@@ -255,7 +259,11 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
             "total_time_str": format_time(total_time),
             "delta_str": delta_string,
             "metrics": results.get('metrics', {}),
-            "reliability": results.get('reliability', {})
+            "reliability": results.get('reliability', {}),
+            "fuel_data": {
+                "avg_fuel_weight": results.get('metrics', {}).get('avg_fuel_weight', 50.0),
+                "fuel_management_score": results.get('metrics', {}).get('fuel_management_score', 50.0)
+            }
         })
 
     # 4. Visualization Data
