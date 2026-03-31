@@ -8,7 +8,9 @@ import pickle
 import warnings
 import os
 from itertools import product
-from typing import Dict, List, Any # Added List and Any
+from typing import Dict, List, Any
+
+from advanced_analysis import AdvancedStrategyAnalyzer
 
 warnings.filterwarnings("ignore")
 
@@ -126,11 +128,11 @@ def visualize_strategies(sorted_results, total_laps, driver, track, final_degrad
 # --- FIX: Renamed arguments to match FastAPI request ---
 def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: Dict) -> Dict:
     """
-    Main function to run the simulation.
+    Main function to run the simulation with advanced analysis.
     Takes driver name, race name, pit loss, and the loaded database.
-    Returns a dictionary with all simulation results.
+    Returns a dictionary with all simulation results including advanced metrics.
     """
-    
+
     # --- Look up all data from the database ---
     try:
         track_data = db['track_models'][race_name]
@@ -163,18 +165,40 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
     print(f"  - Driver Pace Delta: {avg_lap_delta:+.3f}s")
     print(f"  - Final Degradation Rates (s/lap): {final_degradation_rates}\n")
 
+    # Initialize advanced analyzer
+    analyzer = AdvancedStrategyAnalyzer(
+        driver_data={'delta': avg_lap_delta},
+        track_data=track_data
+    )
+
     simulation_results = {}
     for name, strategy in strategies_to_test.items():
         if all(c in final_degradation_rates and c in realistic_base_times for c in strategy):
-            total_time, pit_laps = simulate_strategy(
-                strategy, 
-                total_laps, 
-                final_degradation_rates, 
-                realistic_base_times, 
+            # Use advanced simulation for richer metrics
+            advanced_result = analyzer.simulate_strategy_advanced(
+                strategy,
+                total_laps,
+                final_degradation_rates,
+                realistic_base_times,
                 avg_lap_delta,
-                pit_stop_loss # Pass pit_stop_loss
+                pit_stop_loss
             )
-            simulation_results[name] = {'time': total_time, 'pits': pit_laps, 'compounds': strategy}
+
+            # Also calculate reliability metrics
+            stint_lengths = [total_laps // len(strategy)] * len(strategy)
+            for i in range(total_laps % len(strategy)):
+                stint_lengths[i] += 1
+
+            reliability = analyzer.calculate_strategy_reliability(strategy, stint_lengths)
+
+            simulation_results[name] = {
+                'time': advanced_result['total_time'],
+                'pits': advanced_result['pit_laps'],
+                'compounds': strategy,
+                'metrics': advanced_result['metrics'],
+                'reliability': reliability,
+                'lap_times': advanced_result['lap_times']
+            }
 
     if not simulation_results:
         return {"error": "No valid strategies could be simulated based on the available data."}
@@ -182,40 +206,56 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
     best_strategy_name = min(simulation_results, key=lambda k: simulation_results[k]['time'])
     sorted_results = sorted(simulation_results.items(), key=lambda item: item[1]['time'])
 
+    # Calculate sensitivity analysis for the optimal strategy
+    optimal_strategy = simulation_results[best_strategy_name]['compounds']
+    sensitivity_analysis = analyzer.perform_sensitivity_analysis(
+        optimal_strategy,
+        total_laps,
+        final_degradation_rates,
+        realistic_base_times,
+        avg_lap_delta,
+        pit_stop_loss,
+        parameter='pit_loss'
+    )
+
     # --- Prepare JSON Response ---
     
     # 1. Simulation Parameters
     sim_params = {
         "driver": driver_name,
         "race": race_name,
-        "total_laps": int(total_laps), # <--- FIX
-        "pit_stop_loss": float(pit_stop_loss), # <--- FIX
+        "total_laps": int(total_laps),
+        "pit_stop_loss": float(pit_stop_loss),
         "final_degradation_rates": final_degradation_rates
     }
-    
-    # 2. Optimal Strategy
+
+    # 2. Optimal Strategy with advanced metrics
+    optimal_data = simulation_results[best_strategy_name]
     optimal_strategy = {
         "name": best_strategy_name,
-        "pit_laps": [int(p) for p in simulation_results[best_strategy_name]['pits']] # <--- FIX
+        "pit_laps": [int(p) for p in optimal_data['pits']],
+        "metrics": optimal_data['metrics'],
+        "reliability": optimal_data['reliability']
     }
 
-    # 3. Top 3 Results
+    # 3. Top 3 Results with advanced analysis
     top_3_results = []
     for name, results in sorted_results[:3]:
-        total_time, pit_laps_list = results['time'], results['pits']
-        
-        # --- FIX: Convert NumPy types to Python types for the text string ---
+        total_time = results['time']
+        pit_laps_list = results['pits']
+
         pit_laps_clean = [int(p) for p in pit_laps_list]
         pit_string = f"Pits on Laps: {pit_laps_clean}" if pit_laps_clean else "No Pit Stops"
-        # --- END FIX ---
 
         delta_string = f"(+{total_time - simulation_results[best_strategy_name]['time']:.3f}s)" if name != best_strategy_name else ""
-        
+
         top_3_results.append({
             "name": name,
             "pit_stops_text": pit_string,
             "total_time_str": format_time(total_time),
-            "delta_str": delta_string
+            "delta_str": delta_string,
+            "metrics": results.get('metrics', {}),
+            "reliability": results.get('reliability', {})
         })
 
     # 4. Visualization Data
@@ -237,11 +277,21 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
             "stints": stints
         })
 
-    # 5. Final JSON object
+    # 5. Advanced analysis data
+    advanced_data = {
+        "sensitivity_analysis": {
+            "pit_loss_variations": sensitivity_analysis['variations'],
+            "times": [float(t) for t in sensitivity_analysis['times']],
+            "deltas": [float(d) for d in sensitivity_analysis['deltas']]
+        }
+    }
+
+    # 6. Final JSON object with all enhanced data
     return {
         "simulation_parameters": sim_params,
         "optimal_strategy": optimal_strategy,
         "top_3_results": top_3_results,
-        "visualization_data": viz_data
+        "visualization_data": viz_data,
+        "advanced_analysis": advanced_data
     }
 
