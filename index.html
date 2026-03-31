@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,7 +12,10 @@
     <!-- Chart.js plugin for datalabels (optional but nice) -->
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
         /* Custom styles for Chart.js tooltips */
         .chartjs-tooltip {
             background: rgba(0, 0, 0, 0.8);
@@ -20,6 +24,7 @@
             border-radius: 6px;
             font-size: 14px;
         }
+
         .chartjs-tooltip-key {
             display: inline-block;
             width: 12px;
@@ -27,8 +32,11 @@
             margin-right: 8px;
             border-radius: 2px;
         }
+
+        /* Removed the .tyre-logo CSS as we are now styling the <img> tag directly */
     </style>
 </head>
+
 <body class="bg-gray-900 text-gray-200 font-sans antialiased">
 
     <div class="container mx-auto p-4 md:p-8 max-w-5xl">
@@ -42,11 +50,12 @@
         <!-- Simulation Form -->
         <div class="bg-gray-800 shadow-xl rounded-lg p-6 md:p-8 mb-8">
             <form id="simulation-form" class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                
+
                 <!-- Driver Selection -->
                 <div>
                     <label for="driver_name" class="block text-sm font-medium text-gray-300 mb-2">Driver</label>
-                    <select id="driver_name" name="driver_name" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
+                    <select id="driver_name" name="driver_name"
+                        class="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
                         <option value="" disabled selected>Loading drivers...</option>
                     </select>
                 </div>
@@ -54,31 +63,41 @@
                 <!-- Race Selection -->
                 <div>
                     <label for="race_name" class="block text-sm font-medium text-gray-300 mb-2">Race</label>
-                    <select id="race_name" name="race_name" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
+                    <select id="race_name" name="race_name"
+                        class="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
                         <option value="" disabled selected>Loading races...</option>
                     </select>
                 </div>
 
                 <!-- Pit Stop Loss -->
                 <div>
-                    <label for="pit_stop_loss" class="block text-sm font-medium text-gray-300 mb-2">Pit Stop Loss (s)</label>
-                    <input type="number" id="pit_stop_loss" name="pit_stop_loss" value="22" step="0.1" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
+                    <label for="pit_stop_loss" class="block text-sm font-medium text-gray-300 mb-2">Pit Stop Loss
+                        (s)</label>
+                    <input type="number" id="pit_stop_loss" name="pit_stop_loss" value="22" step="0.1"
+                        class="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
                 </div>
 
                 <!-- Total Laps (Read-only) -->
                 <div>
-                    <label for="total_laps_input" class="block text-sm font-medium text-gray-300 mb-2">Total Laps</label>
-                    <input type="text" id="total_laps_input" name="total_laps_input" value="N/A" readonly class="w-full bg-gray-600 border border-gray-500 text-gray-300 rounded-md p-3 cursor-not-allowed">
+                    <label for="total_laps_input" class="block text-sm font-medium text-gray-300 mb-2">Total
+                        Laps</label>
+                    <input type="text" id="total_laps_input" name="total_laps_input" value="N/A" readonly
+                        class="w-full bg-gray-600 border border-gray-500 text-gray-300 rounded-md p-3 cursor-not-allowed">
                 </div>
 
                 <!-- Submit Button -->
                 <div class="md:col-span-4 mt-4">
-                    <button type="submit" id="run-simulation-btn" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-6 rounded-md text-lg transition duration-300 ease-in-out flex items-center justify-center">
+                    <button type="submit" id="run-simulation-btn"
+                        class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-6 rounded-md text-lg transition duration-300 ease-in-out flex items-center justify-center">
                         <span id="btn-text">Run Simulation</span>
                         <!-- Loading Spinner -->
-                        <svg id="loading-spinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        <svg id="loading-spinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden"
+                            xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
                         </svg>
                     </button>
                 </div>
@@ -86,7 +105,8 @@
         </div>
 
         <!-- Error Display -->
-        <div id="error-display" class="bg-red-800 border-l-4 border-red-400 text-red-100 p-4 rounded-md mb-8 hidden" role="alert">
+        <div id="error-display" class="bg-red-800 border-l-4 border-red-400 text-red-100 p-4 rounded-md mb-8 hidden"
+            role="alert">
             <p class="font-bold">Error</p>
             <p id="error-text">Something went wrong.</p>
         </div>
@@ -98,6 +118,14 @@
                 <h2 class="text-3xl font-bold text-white mb-4">Top Strategies</h2>
                 <div id="results-summary" class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <!-- Results will be injected here by JavaScript -->
+                </div>
+            </div>
+
+            <!-- NEW: Tyre Degradation Display -->
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold text-white mb-4">Tyre Degradation</h2>
+                <div id="degradation-summary" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Degradation data will be injected here -->
                 </div>
             </div>
 
@@ -120,26 +148,26 @@
         const raceSelectEl = document.getElementById('race_name');
         const pitLossEl = document.getElementById('pit_stop_loss');
         const totalLapsEl = document.getElementById('total_laps_input');
-        
+
         const resultsSectionEl = document.getElementById('results-section');
         const resultsSummaryEl = document.getElementById('results-summary');
         const errorEl = document.getElementById('error-display');
         const errorTextEl = document.getElementById('error-text');
-        
+
         const runBtn = document.getElementById('run-simulation-btn');
         const btnText = document.getElementById('btn-text');
         const loadingSpinner = document.getElementById('loading-spinner');
-        
+
         let strategyChart = null; // To hold the Chart.js instance
 
         // --- Event Listeners ---
-        
+
         // Run on page load
         document.addEventListener('DOMContentLoaded', loadDropdownData);
-        
+
         // Run on form submit
         formEl.addEventListener('submit', handleSimulationSubmit);
-        
+
         // Run on race selection change
         raceSelectEl.addEventListener('change', handleRaceChange);
 
@@ -184,9 +212,9 @@
                     // Set default race to the first in the list
                     raceSelectEl.value = data.races[0];
                 } else {
-                     raceSelectEl.innerHTML = '<option value="" disabled selected>No races found</option>';
+                    raceSelectEl.innerHTML = '<option value="" disabled selected>No races found</option>';
                 }
-                
+
                 // After populating, trigger the lap count fetch for the default race
                 await handleRaceChange();
 
@@ -227,7 +255,7 @@
          */
         async function handleSimulationSubmit(e) {
             e.preventDefault(); // Stop form from reloading the page
-            
+
             // Get form values
             const driverName = driverSelectEl.value;
             const raceName = raceSelectEl.value;
@@ -259,7 +287,7 @@
                 if (!response.ok) {
                     throw new Error(data.detail || 'Simulation failed.');
                 }
-                
+
                 // --- Success: Display results ---
                 displayResults(data);
 
@@ -271,13 +299,15 @@
                 setLoading(false);
             }
         }
-        
+
         /**
          * Displays the results from the API
          */
         function displayResults(data) {
             // 1. Clear old results and show section
             resultsSummaryEl.innerHTML = '';
+            const degEl = document.getElementById('degradation-summary');
+            degEl.innerHTML = ''; // Clear old data
             resultsSectionEl.style.display = 'block';
 
             // 2. Populate Top 3 Results
@@ -285,7 +315,7 @@
                 const isOptimal = index === 0;
                 const card = document.createElement('div');
                 card.className = `p-4 rounded-lg shadow-lg ${isOptimal ? 'bg-gray-700 border-2 border-cyan-400' : 'bg-gray-700'}`;
-                
+
                 card.innerHTML = `
                     <h3 class="text-xl font-bold ${isOptimal ? 'text-cyan-400' : 'text-white'}">${result.name} <span class="text-lg font-medium text-yellow-400">${result.delta_str}</span></h3>
                     <p class="text-gray-300 text-sm mt-1">${result.pit_stops_text}</p>
@@ -294,7 +324,59 @@
                 resultsSummaryEl.appendChild(card);
             });
 
-            // 3. Render Visualization
+            // 3. Populate Tyre Degradation
+            const tyreInfo = {
+                "SOFT": { 
+                    name: "Soft", 
+                    img: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/F1_tire_Pirelli_PZero_Red.svg/250px-F1_tire_Pirelli_PZero_Red.svg.png",
+                    fallback: "https://placehold.co/40x40/FF3333/000000?text=S"
+                },
+                "MEDIUM": { 
+                    name: "Medium", 
+                    img: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/F1_tire_Pirelli_PZero_Yellow.svg/250px-F1_tire_Pirelli_PZero_Yellow.svg.png",
+                    fallback: "https://placehold.co/40x40/FFF333/000000?text=M"
+                },
+                "HARD": { 
+                    name: "Hard", 
+                    img: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/F1_tire_Pirelli_PZero_White.svg/250px-F1_tire_Pirelli_PZero_White.svg.png",
+                    fallback: "https://placehold.co/40x40/EBEBEB/000000?text=H"
+                }
+            };
+
+
+            const rates = data.simulation_parameters.final_degradation_rates;
+
+            for (const compound in rates) {
+                if (tyreInfo[compound]) {
+                    const info = tyreInfo[compound];
+                    const rate = rates[compound]; // This is now a number
+
+                    const card = document.createElement('div');
+                    card.className = 'bg-gray-700 p-4 rounded-lg shadow-lg flex items-center space-x-4';
+                    
+                    // --- FIX IS HERE ---
+                    // 1. Use src, alt, and info.img
+                    // 2. Added onerror to load a fallback placeholder
+                    // 3. Removed the tyre-logo div
+                    card.innerHTML = `
+                        <div>
+                            <img src="${info.img}" 
+                                 alt="${info.name} tyre" 
+                                 class="w-10 h-10 rounded-full flex-shrink-0"
+                                 onerror="this.onerror=null; this.src='${info.fallback}';">
+                        </div>
+                        <div>
+                            <p class="text-lg font-semibold text-white">${info.name} Tyre</p>
+                            <p class="text-xl font-bold text-cyan-400">${rate.toFixed(3)} s/lap</p>
+                        </div>
+                    `;
+                    // --- END OF FIX ---
+                    
+                    degEl.appendChild(card);
+                }
+            }
+
+            // 4. Render Visualization
             renderChart(data.visualization_data);
         }
 
@@ -303,7 +385,7 @@
          */
         function renderChart(vizData) {
             const ctx = document.getElementById('strategy-chart').getContext('2d');
-            
+
             const tyreColors = {
                 'SOFT': 'rgba(255, 51, 51, 0.8)',
                 'MEDIUM': 'rgba(255, 243, 51, 0.8)',
@@ -318,7 +400,7 @@
             // Prepare data for Chart.js
             const labels = vizData.map(d => d.name);
             const datasets = [];
-            
+
             // Find max number of stints to create enough datasets
             const maxStints = Math.max(...vizData.map(d => d.stints.length));
 
@@ -459,5 +541,6 @@
 
     </script>
 </body>
+
 </html>
 
