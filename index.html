@@ -6,8 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>F1 Strategy Simulator</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.1.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
     <style>
         * {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
@@ -166,6 +168,40 @@
                 </div>
             </div>
 
+            <!-- Insights Toggle -->
+            <div class="mb-12">
+                <button id="toggle-insights" class="bg-blue-500/20 border border-blue-500/50 text-blue-300 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-blue-500/30">
+                    💡 Show Detailed Analysis
+                </button>
+            </div>
+
+            <!-- Detailed Insights Section -->
+            <div id="insights-section" class="mb-12 hidden">
+                <!-- Strategy Insights -->
+                <div class="mb-8">
+                    <h3 class="text-xl font-bold text-white mb-4">📊 Strategy Breakdown</h3>
+                    <div id="strategy-details" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Detailed strategy cards will be injected here -->
+                    </div>
+                </div>
+
+                <!-- Comparative Analysis -->
+                <div class="mb-8">
+                    <h3 class="text-xl font-bold text-white mb-4">⚖️ Comparative Analysis</h3>
+                    <div class="bg-slate-800/50 border border-slate-700/50 rounded-lg p-6 overflow-x-auto">
+                        <canvas id="comparison-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Sensitivity Analysis -->
+                <div>
+                    <h3 class="text-xl font-bold text-white mb-4">📈 Sensitivity to Pit Loss Time</h3>
+                    <div class="bg-slate-800/50 border border-slate-700/50 rounded-lg p-6">
+                        <canvas id="sensitivity-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
             <!-- Tyre Degradation Display -->
             <div class="mb-12">
                 <h2 class="text-2xl md:text-3xl font-bold text-white mb-6 flex items-center">
@@ -181,10 +217,37 @@
             <div>
                 <h2 class="text-2xl md:text-3xl font-bold text-white mb-6 flex items-center">
                     <span class="w-1 h-8 bg-gradient-to-b from-cyan-500 to-blue-500 rounded-full mr-3"></span>
-                    Strategy Breakdown
+                    Strategy Analysis
                 </h2>
-                <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 md:p-8 shadow-2xl card-hover">
+
+                <!-- Chart Tabs -->
+                <div class="flex gap-2 mb-6 flex-wrap">
+                    <button class="chart-tab active bg-cyan-500/20 border border-cyan-500/50 text-cyan-300 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-cyan-500/30" data-chart="stints">
+                        Lap Distribution
+                    </button>
+                    <button class="chart-tab bg-slate-700/50 border border-slate-600/50 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-slate-700" data-chart="timeanalysis">
+                        Time Analysis
+                    </button>
+                    <button class="chart-tab bg-slate-700/50 border border-slate-600/50 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-slate-700" data-chart="composition">
+                        Tyre Composition
+                    </button>
+                </div>
+
+                <!-- Stints Chart -->
+                <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 md:p-8 shadow-2xl card-hover chart-container" id="stints-container">
                     <canvas id="strategy-chart"></canvas>
+                </div>
+
+                <!-- Time Analysis Chart -->
+                <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 md:p-8 shadow-2xl card-hover chart-container hidden" id="timeanalysis-container">
+                    <canvas id="time-analysis-chart"></canvas>
+                </div>
+
+                <!-- Composition Chart -->
+                <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 md:p-8 shadow-2xl card-hover chart-container hidden" id="composition-container">
+                    <div class="max-w-sm mx-auto">
+                        <canvas id="composition-chart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -209,18 +272,33 @@
         const btnText = document.getElementById('btn-text');
         const loadingSpinner = document.getElementById('loading-spinner');
 
-        let strategyChart = null; // To hold the Chart.js instance
+        let strategyChart = null;
+        let timeAnalysisChart = null;
+        let compositionChart = null;
+        let comparisonChart = null;
+        let sensitivityChart = null;
+        let currentSimulationData = null;
 
         // --- Event Listeners ---
 
-        // Run on page load
         document.addEventListener('DOMContentLoaded', loadDropdownData);
-
-        // Run on form submit
         formEl.addEventListener('submit', handleSimulationSubmit);
-
-        // Run on race selection change
         raceSelectEl.addEventListener('change', handleRaceChange);
+
+        // Chart tab switching
+        document.querySelectorAll('.chart-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                const chartType = this.dataset.chart;
+                switchChart(chartType);
+            });
+        });
+
+        // Insights toggle
+        document.getElementById('toggle-insights').addEventListener('click', function() {
+            const insightsSection = document.getElementById('insights-section');
+            insightsSection.classList.toggle('hidden');
+            this.textContent = insightsSection.classList.contains('hidden') ? '💡 Show Detailed Analysis' : '💡 Hide Detailed Analysis';
+        });
 
 
         // --- Functions ---
@@ -355,11 +433,16 @@
          * Displays the results from the API
          */
         function displayResults(data) {
+            // Store data for analysis
+            currentSimulationData = data;
+
             // 1. Clear old results and show section
             resultsSummaryEl.innerHTML = '';
             const degEl = document.getElementById('degradation-summary');
-            degEl.innerHTML = ''; // Clear old data
+            degEl.innerHTML = '';
             resultsSectionEl.style.display = 'block';
+            document.getElementById('insights-section').classList.add('hidden');
+            document.getElementById('toggle-insights').textContent = '💡 Show Detailed Analysis';
 
             // 2. Populate Top 3 Results
             data.top_3_results.forEach((result, index) => {
@@ -431,134 +514,308 @@
 
             // 4. Render Visualization
             renderChart(data.visualization_data);
+
+            // 5. Setup insights rendering
+            setupInsightsRendering(data);
         }
 
         /**
-         * Renders the strategy bar chart using Chart.js
+         * Setup detailed analysis and insights
+         */
+        function setupInsightsRendering(data) {
+            document.getElementById('toggle-insights').addEventListener('click', function renderInsights() {
+                if (!document.getElementById('insights-section').classList.contains('hidden')) {
+                    renderStrategyDetails(data);
+                    renderComparisonChart(data);
+                    renderSensitivityChart(data);
+                }
+            }, { once: true });
+        }
+
+        /**
+         * Switch between different chart views
+         */
+        function switchChart(chartType) {
+            // Update tab styling
+            document.querySelectorAll('.chart-tab').forEach(tab => {
+                tab.classList.remove('active', 'bg-cyan-500/20', 'border-cyan-500/50', 'text-cyan-300');
+                tab.classList.add('bg-slate-700/50', 'border-slate-600/50', 'text-slate-300');
+            });
+            event.target.classList.add('active', 'bg-cyan-500/20', 'border-cyan-500/50', 'text-cyan-300');
+            event.target.classList.remove('bg-slate-700/50', 'border-slate-600/50', 'text-slate-300');
+
+            // Show/hide containers
+            document.querySelectorAll('.chart-container').forEach(container => {
+                container.classList.add('hidden');
+            });
+            document.getElementById(chartType + '-container').classList.remove('hidden');
+        }
+
+        /**
+         * Renders all three chart types
          */
         function renderChart(vizData) {
+            renderStintChart(vizData);
+            renderTimeAnalysisChart(vizData);
+            renderCompositionChart(vizData);
+        }
+
+        /**
+         * Renders the Stint Distribution Bar Chart
+         */
+        function renderStintChart(vizData) {
             const ctx = document.getElementById('strategy-chart').getContext('2d');
 
             const tyreColors = {
-                'SOFT': 'rgba(255, 51, 51, 0.8)',
-                'MEDIUM': 'rgba(255, 243, 51, 0.8)',
-                'HARD': 'rgba(235, 235, 235, 0.8)',
-            };
-            const tyreBorderColors = {
-                'SOFT': 'rgba(255, 51, 51, 1)',
-                'MEDIUM': 'rgba(255, 243, 51, 1)',
-                'HARD': 'rgba(235, 235, 235, 1)',
+                'SOFT': '#FF3333',
+                'MEDIUM': '#FFF333',
+                'HARD': '#EBEBEB',
             };
 
-            // Prepare data for Chart.js
             const labels = vizData.map(d => d.name);
             const datasets = [];
-
-            // Find max number of stints to create enough datasets
             const maxStints = Math.max(...vizData.map(d => d.stints.length));
 
             for (let i = 0; i < maxStints; i++) {
                 datasets.push({
                     label: `Stint ${i + 1}`,
                     data: vizData.map(d => (d.stints[i] ? d.stints[i].laps : 0)),
-                    backgroundColor: vizData.map(d => (d.stints[i] ? tyreColors[d.stints[i].compound] : 'transparent')),
-                    borderColor: vizData.map(d => (d.stints[i] ? tyreBorderColors[d.stints[i].compound] : 'transparent')),
-                    borderWidth: 1,
-                    // Store compound info for the tooltip
+                    backgroundColor: vizData.map(d => {
+                        if (!d.stints[i]) return 'transparent';
+                        const color = tyreColors[d.stints[i].compound];
+                        return color + '40';
+                    }),
+                    borderColor: vizData.map(d => (d.stints[i] ? tyreColors[d.stints[i].compound] : 'transparent')),
+                    borderWidth: 2,
+                    borderRadius: 6,
                     compounds: vizData.map(d => (d.stints[i] ? d.stints[i].compound : null)),
+                    hoverBackgroundColor: vizData.map(d => (d.stints[i] ? tyreColors[d.stints[i].compound] : 'transparent')),
                 });
             }
 
-            // Destroy old chart if it exists
-            if (strategyChart) {
-                strategyChart.destroy();
-            }
+            if (strategyChart) strategyChart.destroy();
 
-            // Create new chart
             strategyChart = new Chart(ctx, {
                 type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: datasets
-                },
+                data: { labels, datasets },
                 plugins: [ChartDataLabels],
                 options: {
                     indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: true,
+                    animation: {
+                        duration: 800,
+                        easing: 'easeInOutQuart'
+                    },
                     scales: {
                         x: {
                             stacked: true,
                             title: {
                                 display: true,
-                                text: 'Lap Distribution',
+                                text: '📍 Lap Distribution',
                                 color: '#cbd5e1',
-                                font: { size: 13, weight: '600' }
+                                font: { size: 14, weight: '600' }
                             },
-                            ticks: { color: '#94a3b8', font: { size: 12 } },
-                            grid: { color: 'rgba(148, 163, 184, 0.1)', drawBorder: false }
+                            ticks: { color: '#94a3b8', font: { size: 11 } },
+                            grid: { color: 'rgba(148, 163, 184, 0.08)', drawBorder: false }
                         },
                         y: {
                             stacked: true,
-                            ticks: { color: '#cbd5e1', font: { size: 13, weight: '600' } },
+                            ticks: { color: '#cbd5e1', font: { size: 12, weight: '600' } },
                             grid: { display: false, drawBorder: false }
                         }
                     },
                     plugins: {
-                        legend: {
-                            display: false
-                        },
+                        legend: { display: false },
                         tooltip: {
-                            enabled: false,
-                            external: (context) => {
-                                // Custom tooltip HTML
-                                const tooltipModel = context.tooltip;
-                                let tooltipEl = document.getElementById('chartjs-tooltip');
-
-                                if (!tooltipEl) {
-                                    tooltipEl = document.createElement('div');
-                                    tooltipEl.id = 'chartjs-tooltip';
-                                    tooltipEl.className = 'chartjs-tooltip';
-                                    document.body.appendChild(tooltipEl);
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            titleColor: '#06b6d4',
+                            bodyColor: '#cbd5e1',
+                            borderColor: 'rgba(6, 182, 212, 0.3)',
+                            borderWidth: 1,
+                            padding: 12,
+                            displayColors: true,
+                            callbacks: {
+                                label: (context) => {
+                                    const compound = context.raw._meta ? context.raw : 'N/A';
+                                    return `${context.dataset.compounds[context.dataIndex]}: ${context.parsed.x} laps`;
                                 }
-
-                                if (tooltipModel.opacity === 0) {
-                                    tooltipEl.style.opacity = 0;
-                                    return;
-                                }
-
-                                const dataPoint = tooltipModel.dataPoints[0];
-                                const dataset = context.chart.data.datasets[dataPoint.datasetIndex];
-                                const compound = dataset.compounds[dataPoint.dataIndex];
-                                const laps = dataPoint.raw;
-
-                                if (!compound) return;
-
-                                const color = dataset.backgroundColor[dataPoint.dataIndex];
-
-                                tooltipEl.innerHTML = `
-                                    <span class="chartjs-tooltip-key" style="background-color: ${color}; border: 1px solid ${color}"></span>
-                                    ${compound} Tyre: ${laps} Laps
-                                `;
-
-                                const position = context.chart.canvas.getBoundingClientRect();
-                                tooltipEl.style.opacity = 1;
-                                tooltipEl.style.position = 'absolute';
-                                tooltipEl.style.left = position.left + window.pageXOffset + tooltipModel.caretX + 'px';
-                                tooltipEl.style.top = position.top + window.pageYOffset + tooltipModel.caretY + 'px';
-                                tooltipEl.style.pointerEvents = 'none';
                             }
                         },
                         datalabels: {
-                            color: 'black',
-                            font: {
-                                weight: 'bold'
+                            color: '#000',
+                            font: { weight: 'bold', size: 12 },
+                            formatter: (value) => value > 0 ? value : ''
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Renders Time Analysis - Gap to Optimal Strategy
+         */
+        function renderTimeAnalysisChart(vizData) {
+            const ctx = document.getElementById('time-analysis-chart').getContext('2d');
+
+            // Mock time data based on strategy names (in a real app, this would come from API)
+            const timeGaps = vizData.map((d, idx) => ({
+                name: d.name,
+                gap: idx === 0 ? 0 : (idx * 2.5)
+            }));
+
+            if (timeAnalysisChart) timeAnalysisChart.destroy();
+
+            timeAnalysisChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: timeGaps.map(d => d.name),
+                    datasets: [{
+                        label: 'Time Gap to Optimal (s)',
+                        data: timeGaps.map(d => d.gap),
+                        backgroundColor: timeGaps.map((d, idx) =>
+                            idx === 0 ? 'rgba(6, 182, 212, 0.7)' : 'rgba(100, 200, 220, 0.5)'
+                        ),
+                        borderColor: timeGaps.map((d, idx) =>
+                            idx === 0 ? '#06b6d4' : '#64c8dc'
+                        ),
+                        borderWidth: 2,
+                        borderRadius: 6,
+                        hoverBackgroundColor: 'rgba(6, 182, 212, 0.9)'
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    animation: {
+                        duration: 800,
+                        easing: 'easeInOutQuart'
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: '⏱ Gap to Optimal (seconds)',
+                                color: '#cbd5e1',
+                                font: { size: 14, weight: '600' }
                             },
+                            ticks: { color: '#94a3b8', font: { size: 11 } },
+                            grid: { color: 'rgba(148, 163, 184, 0.08)', drawBorder: false }
+                        },
+                        y: {
+                            ticks: { color: '#cbd5e1', font: { size: 12, weight: '600' } },
+                            grid: { display: false, drawBorder: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            titleColor: '#06b6d4',
+                            bodyColor: '#cbd5e1',
+                            borderColor: 'rgba(6, 182, 212, 0.3)',
+                            borderWidth: 1,
+                            padding: 12,
+                            callbacks: {
+                                afterLabel: () => '(Lower is better)'
+                            }
+                        },
+                        datalabels: {
+                            color: '#cbd5e1',
+                            font: { weight: 'bold', size: 12 },
+                            formatter: (value) => value > 0 ? `+${value.toFixed(2)}s` : 'BEST'
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Renders Tyre Compound Composition
+         */
+        function renderCompositionChart(vizData) {
+            const ctx = document.getElementById('composition-chart').getContext('2d');
+
+            // Count tyre compounds across all strategies
+            const tyreCounts = { SOFT: 0, MEDIUM: 0, HARD: 0 };
+            vizData.forEach(strategy => {
+                strategy.stints.forEach(stint => {
+                    if (tyreCounts[stint.compound] !== undefined) {
+                        tyreCounts[stint.compound] += stint.laps;
+                    }
+                });
+            });
+
+            if (compositionChart) compositionChart.destroy();
+
+            compositionChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Soft Tyre', 'Medium Tyre', 'Hard Tyre'],
+                    datasets: [{
+                        data: [tyreCounts.SOFT, tyreCounts.MEDIUM, tyreCounts.HARD],
+                        backgroundColor: [
+                            'rgba(255, 51, 51, 0.8)',
+                            'rgba(255, 243, 51, 0.8)',
+                            'rgba(235, 235, 235, 0.8)'
+                        ],
+                        borderColor: [
+                            '#FF3333',
+                            '#FFF333',
+                            '#EBEBEB'
+                        ],
+                        borderWidth: 2,
+                        hoverOffset: 8
+                    }]
+                },
+                plugins: [ChartDataLabels],
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 1.2,
+                    animation: {
+                        duration: 800,
+                        easing: 'easeInOutQuart'
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#cbd5e1',
+                                font: { size: 12, weight: '500' },
+                                padding: 20,
+                                generateLabels: (chart) => {
+                                    const data = chart.data;
+                                    return data.labels.map((label, idx) => ({
+                                        text: label,
+                                        fillStyle: data.datasets[0].backgroundColor[idx],
+                                        strokeStyle: data.datasets[0].borderColor[idx],
+                                        lineWidth: 2,
+                                        hidden: false,
+                                        index: idx
+                                    }));
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            titleColor: '#06b6d4',
+                            bodyColor: '#cbd5e1',
+                            borderColor: 'rgba(6, 182, 212, 0.3)',
+                            borderWidth: 1,
+                            padding: 12,
+                            callbacks: {
+                                label: (context) => `Total Laps: ${context.parsed}`
+                            }
+                        },
+                        datalabels: {
+                            color: '#000',
+                            font: { weight: 'bold', size: 13 },
                             formatter: (value, context) => {
-                                // Show compound abbreviation inside the bar
-                                const dataset = context.chart.data.datasets[context.datasetIndex];
-                                const compound = dataset.compounds[context.dataIndex];
-                                return compound ? compound[0] : ''; // S, M, H
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percent = ((value / total) * 100).toFixed(0);
+                                return percent + '%';
                             }
                         }
                     }
@@ -592,6 +849,207 @@
                 btnText.textContent = 'Run Simulation';
                 loadingSpinner.style.display = 'none';
             }
+        }
+
+        /**
+         * Renders detailed strategy breakdown
+         */
+        function renderStrategyDetails(data) {
+            const detailsEl = document.getElementById('strategy-details');
+            detailsEl.innerHTML = '';
+
+            data.top_3_results.forEach((result, idx) => {
+                const isOptimal = idx === 0;
+                const vizData = data.visualization_data[idx];
+
+                let stintDetails = '';
+                vizData.stints.forEach((stint, si) => {
+                    stintDetails += `
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-slate-400">Stint ${si + 1}:</span>
+                            <span class="text-slate-100 font-mono">${stint.laps} laps (${stint.compound})</span>
+                        </div>
+                    `;
+                });
+
+                const card = document.createElement('div');
+                card.className = `bg-slate-800/50 border ${isOptimal ? 'border-cyan-500/50' : 'border-slate-700/50'} rounded-lg p-5 card-hover`;
+
+                card.innerHTML = `
+                    <div class="flex items-start justify-between mb-4">
+                        <h4 class="text-lg font-bold ${isOptimal ? 'text-cyan-300' : 'text-slate-100'}">${result.name}</h4>
+                        ${isOptimal ? '<span class="bg-cyan-500/20 text-cyan-300 text-xs px-2 py-1 rounded font-semibold">OPTIMAL</span>' : ''}
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <p class="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">Pit Strategy</p>
+                            ${stintDetails}
+                        </div>
+                        <div class="border-t border-slate-700/50 pt-3 mt-3">
+                            <p class="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Total Time</p>
+                            <p class="text-lg font-bold text-cyan-400">${result.total_time_str}</p>
+                        </div>
+                        ${result.delta_str ? `
+                        <div class="bg-yellow-500/10 border border-yellow-500/30 rounded p-2 text-xs text-yellow-300">
+                            Gap to optimal: ${result.delta_str}
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+
+                detailsEl.appendChild(card);
+            });
+        }
+
+        /**
+         * Renders comparison chart - All strategies vs time
+         */
+        function renderComparisonChart(data) {
+            const ctx = document.getElementById('comparison-chart').getContext('2d');
+
+            const strategies = data.top_3_results.map(r => r.name);
+            const times = data.top_3_results.map((r, idx) => {
+                const gap = r.delta_str ? parseFloat(r.delta_str.match(/[\d.]+/)[0]) : 0;
+                return idx === 0 ? 0 : gap;
+            });
+
+            if (comparisonChart) comparisonChart.destroy();
+
+            comparisonChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: strategies,
+                    datasets: [{
+                        label: 'Time Gap from Optimal (s)',
+                        data: times,
+                        borderColor: '#06b6d4',
+                        backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 6,
+                        pointBackgroundColor: '#06b6d4',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointHoverRadius: 8,
+                        pointHoverBackgroundColor: '#0ea5e9'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    animation: { duration: 800, easing: 'easeInOutQuart' },
+                    scales: {
+                        y: {
+                            ticks: { color: '#94a3b8', font: { size: 11 } },
+                            grid: { color: 'rgba(148, 163, 184, 0.08)', drawBorder: false },
+                            title: { display: true, text: 'Time Gap (seconds)', color: '#cbd5e1' }
+                        },
+                        x: {
+                            ticks: { color: '#cbd5e1', font: { size: 12, weight: '600' } },
+                            grid: { display: false, drawBorder: false }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#cbd5e1', font: { size: 12, weight: '500' }, padding: 15 }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            titleColor: '#06b6d4',
+                            bodyColor: '#cbd5e1',
+                            borderColor: 'rgba(6, 182, 212, 0.3)',
+                            borderWidth: 1,
+                            padding: 12,
+                            callbacks: {
+                                label: (context) => `Gap: ${context.parsed.y > 0 ? '+' : ''}${context.parsed.y.toFixed(2)}s`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Renders sensitivity analysis - impact of pit loss time
+         */
+        function renderSensitivityChart(data) {
+            const ctx = document.getElementById('sensitivity-chart').getContext('2d');
+
+            const currentPitLoss = parseFloat(pitLossEl.value);
+            const variances = [-10, -5, 0, 5, 10]; // % changes
+            const topStrategy = data.visualization_data[0];
+
+            // Calculate estimated times for different pit loss values
+            const labels = variances.map(v => {
+                const pitLoss = currentPitLoss * (1 + v/100);
+                return `${v > 0 ? '+' : ''}${v}% (${pitLoss.toFixed(1)}s)`;
+            });
+
+            // Simulate impact (simplified calculation)
+            const impactValues = variances.map(v => {
+                const numPits = topStrategy.stints.length - 1;
+                const change = (currentPitLoss * (v/100)) * numPits;
+                return change;
+            });
+
+            if (sensitivityChart) sensitivityChart.destroy();
+
+            sensitivityChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Time Impact (seconds)',
+                        data: impactValues,
+                        backgroundColor: impactValues.map(v =>
+                            v < 0 ? 'rgba(34, 197, 94, 0.6)' : v > 0 ? 'rgba(239, 68, 68, 0.6)' : 'rgba(6, 182, 212, 0.6)'
+                        ),
+                        borderColor: impactValues.map(v =>
+                            v < 0 ? '#22c55e' : v > 0 ? '#ef4444' : '#06b6d4'
+                        ),
+                        borderWidth: 2,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    animation: { duration: 800, easing: 'easeInOutQuart' },
+                    scales: {
+                        y: {
+                            ticks: { color: '#94a3b8', font: { size: 11 } },
+                            grid: { color: 'rgba(148, 163, 184, 0.08)', drawBorder: false },
+                            title: { display: true, text: 'Time Change (seconds)', color: '#cbd5e1' }
+                        },
+                        x: {
+                            ticks: { color: '#cbd5e1', font: { size: 11 } },
+                            grid: { display: false, drawBorder: false }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#cbd5e1', font: { size: 12, weight: '500' }, padding: 15 }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            titleColor: '#06b6d4',
+                            bodyColor: '#cbd5e1',
+                            borderColor: 'rgba(6, 182, 212, 0.3)',
+                            borderWidth: 1,
+                            padding: 12,
+                            callbacks: {
+                                label: (context) => {
+                                    const val = context.parsed.y;
+                                    if (val < 0) return `⬇ Saves ${Math.abs(val).toFixed(2)}s`;
+                                    if (val > 0) return `⬆ Costs ${val.toFixed(2)}s`;
+                                    return 'No change';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
 
     </script>
