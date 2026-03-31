@@ -9,3 +9,4 @@ fastf1_cache/
 # Ignore the precomputed database file
 strategy_database.pkl
 *.pkl
+.claude

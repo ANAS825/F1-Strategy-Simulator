@@ -70,7 +70,7 @@ async def startup_event():
 async def get_frontend(request: Request):
     """Serves the main index.html file."""
     try:
-        with open("index.html", "r") as f:
+        with open("index.html", "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read(), status_code=200)
     except FileNotFoundError:
         return HTMLResponse(content="<h1>index.html not found</h1><p>Please add the frontend file to your project directory.</p>", status_code=404)
