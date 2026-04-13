@@ -307,16 +307,29 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
         print("--- Using Genetic Algorithm Optimizer ---")
         optimizer = StrategyGeneticOptimizer()
 
-        # Create fitness function
-        def fitness_func(num_stops: int, pit_laps: List[int]) -> float:
-            strategy = pits_to_strategy(pit_laps, total_laps)
-            if not all(c in final_degradation_rates and c in realistic_base_times for c in strategy):
+        # Create updated fitness function that accepts compounds
+        def fitness_func(num_stops: int, pit_laps: List[int], compounds: List[str]) -> float:
+            # 1. FIA RULE CHECK: Must use at least 2 different dry compounds
+            unique_compounds = set(compounds)
+            if len(unique_compounds) < 2 and weather == 'DRY':
+                return float('inf')  # Instant disqualification
+                
+            # 2. Check for ascending pit laps
+            if sorted(pit_laps) != pit_laps or len(set(pit_laps)) != len(pit_laps):
+                return float('inf')
+
+            # 3. Ensure valid data for these compounds
+            if not all(c in final_degradation_rates and c in realistic_base_times for c in compounds):
                 return float('inf')
 
             try:
                 result = analyzer.simulate_strategy_advanced(
-                    strategy, total_laps, final_degradation_rates,
-                    realistic_base_times, avg_lap_delta, pit_stop_loss
+                    strategy=compounds, 
+                    total_laps=total_laps, 
+                    degradation_rates=final_degradation_rates,
+                    base_times=realistic_base_times, 
+                    driver_delta=avg_lap_delta, 
+                    pit_stop_loss=pit_stop_loss
                 )
                 return result['total_time']
             except:
@@ -329,14 +342,17 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
             population_size=20,
             num_generations=30,
             elite_size=4,
-            mutation_rate=0.3
+            mutation_rate=0.35 # Slightly higher for the new chromosome space
         )
 
         # Convert GA results to full simulation results
         for idx, ga_result in enumerate(best_strategies_ga[:5]):  # Use top 5
-            strategy = pits_to_strategy(ga_result['pit_laps'], total_laps)
+            # We no longer need pits_to_strategy! The GA gives us the compounds directly.
+            strategy = ga_result['compounds'] 
+            
             if all(c in final_degradation_rates and c in realistic_base_times for c in strategy):
-                strategy_name = f"GA-Optimized-{idx+1}"
+                # Make the UI name dynamic based on the GA's tire choices
+                strategy_name = f"GA: {'-'.join([c[0] for c in strategy])} ({ga_result['num_stops']} Stop)"
 
                 try:
                     advanced_result = analyzer.simulate_strategy_advanced(

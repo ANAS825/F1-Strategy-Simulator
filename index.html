@@ -162,11 +162,21 @@
                     </div>
             </div>
 
-            <div class="mb-12">
-                <button id="toggle-insights" class="bg-blue-500/20 border border-blue-500/50 text-blue-300 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-blue-500/30">
-                    💡 Show Detailed Analysis
-                </button>
-            </div>
+            <div class="mb-12 flex flex-wrap items-center gap-4">
+    <button id="toggle-insights" class="bg-blue-500/20 border border-blue-500/50 text-blue-300 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-blue-500/30">
+        💡 Show Detailed Analysis
+    </button>
+
+    <button type="button" id="btn-show-track" onclick="showTrackMap()" 
+        class="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold rounded-lg shadow-lg transition-all flex items-center gap-2 text-sm">
+        🗺️ View Track Layout
+    </button>
+
+    <button type="button" id="btn-show-driver" onclick="showDriverInfo()" 
+        class="px-4 py-2 bg-gradient-to-r from-blue-500 to-lightblue-500 hover:from-blue-600 hover:to-lightblue-600 text-white font-bold rounded-lg shadow-lg transition-all flex items-center gap-2 text-sm">
+        🪪 View Driver Profile
+    </button>
+</div>
 
             <div id="insights-section" class="mb-12 hidden">
                 <div class="mb-8">
@@ -243,6 +253,74 @@
         </div>
         </div>
     </div>
+    <div id="track-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm transition-opacity">
+    <div class="bg-gray-900 border border-cyan-500/50 rounded-xl shadow-2xl p-6 w-full max-w-3xl relative">
+        <button onclick="closeTrackMap()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl font-bold">&times;</button>
+        
+        <h2 class="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+            📍 <span id="track-modal-title">Circuit Layout</span>
+        </h2>
+        <p class="text-cyan-400 text-sm mb-4">Telemetry path based on fastest lap</p>
+        
+        <div class="w-full aspect-square md:aspect-video flex items-center justify-center bg-gray-950 rounded-lg p-4 border border-gray-800">
+            <canvas id="trackMapCanvas"></canvas>
+        </div>
+        
+        <div id="track-loading" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-gray-900/80 rounded-xl">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mb-3"></div>
+            <p class="text-cyan-400">Extracting telemetry geometry...</p>
+        </div>
+    </div>
+</div>
+<div id="driver-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm transition-opacity">
+    <div class="bg-gray-900 border border-purple-500/50 rounded-xl shadow-2xl p-6 w-full max-w-md relative overflow-hidden">
+        
+        <div class="absolute -top-20 -right-20 w-48 h-48 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+        <div class="absolute -bottom-20 -left-20 w-48 h-48 bg-pink-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+
+        <button onclick="closeDriverInfo()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl font-bold z-10">&times;</button>
+        
+        <div class="flex items-center gap-4 border-b border-gray-800 pb-4 mb-4 relative z-10">
+            <div class="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl font-black text-white shadow-lg" id="driver-badge">
+                VER
+            </div>
+            <div>
+                <h2 class="text-2xl font-bold text-white" id="modal-driver-name">Max Verstappen</h2>
+                <p class="text-purple-400 font-medium flex items-center gap-2">
+                    <span id="modal-driver-team">Red Bull Racing</span> • <span id="modal-driver-country">🇳🇱</span>
+                </p>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4 relative z-10">
+            <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 text-center">
+                <p class="text-gray-400 text-xs uppercase tracking-wider mb-1">World Titles</p>
+                <p class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600" id="stat-champ">3</p>
+            </div>
+            <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 text-center">
+                <p class="text-gray-400 text-xs uppercase tracking-wider mb-1">Race Wins</p>
+                <p class="text-2xl font-bold text-white" id="stat-wins">58</p>
+            </div>
+            <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 text-center">
+                <p class="text-gray-400 text-xs uppercase tracking-wider mb-1">Podiums</p>
+                <p class="text-2xl font-bold text-white" id="stat-podiums">103</p>
+            </div>
+            <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 text-center">
+                <p class="text-gray-400 text-xs uppercase tracking-wider mb-1">Pole Positions</p>
+                <p class="text-2xl font-bold text-white" id="stat-poles">37</p>
+            </div>
+            <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 text-center col-span-2">
+                <p class="text-gray-400 text-xs uppercase tracking-wider mb-1">Total Race Starts</p>
+                <p class="text-xl font-bold text-purple-300" id="stat-starts">191</p>
+            </div>
+        </div>
+
+        <div id="driver-loading" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 z-20">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500 mb-3"></div>
+            <p class="text-purple-400">Loading driver dossier...</p>
+        </div>
+    </div>
+</div>
 
     <script>
         // --- Globals ---
@@ -1054,70 +1132,54 @@
         let lapVisualizer = null;
 
         function initializeLapVisualizer(data) {
-            // Check if we have the necessary data for visualization
             if (!data.top_3_results || data.top_3_results.length === 0) {
                 console.warn('No simulation data available for Lap Visualizer');
                 return;
             }
 
-            // Get the optimal (first) strategy result
-            const optimalStrategy = data.top_3_results[0];
+            // NEW: Format ALL strategies into an array
+            const formattedStrategies = data.top_3_results.map(strategy => {
+                return {
+                    driver_name: document.getElementById('driver_name').value || 'Driver',
+                    race_name: document.getElementById('race_name').value || 'Race',
+                    strategy_name: strategy.name || strategy.strategy_name || 'Optimal',
+                    total_time: strategy.total_time || 0,
+                    final_position: strategy.position || 1,
+                    lap_times: strategy.lap_times || [],
+                    fuel_levels: strategy.fuel_levels || [],
+                    tyre_ages: strategy.tyre_ages || [],
+                    positions: strategy.positions || [],
+                    pit_stops: strategy.pit_stops || []
+                };
+            });
 
-            // Transform data for the visualizer
-            const visualizerData = {
-                driver_name: document.getElementById('driver_name').value || 'Driver',
-                race_name: document.getElementById('race_name').value || 'Race',
-                strategy_name: optimalStrategy.name || optimalStrategy.strategy_name || 'Optimal',
-                total_time: optimalStrategy.total_time || 0,
-                final_position: optimalStrategy.position || 1,
-
-                // Lap-by-lap data - default to empty arrays if not available
-                lap_times: optimalStrategy.lap_times || [],
-                fuel_levels: optimalStrategy.fuel_levels || [],
-                tyre_ages: optimalStrategy.tyre_ages || [],
-                positions: optimalStrategy.positions || [],
-
-                // Pit stop events
-                pit_stops: optimalStrategy.pit_stops || []
-            };
-
-            // Validate that we have necessary data
             const hasLapData =
-                visualizerData.lap_times.length > 0 &&
-                visualizerData.fuel_levels.length > 0 &&
-                visualizerData.tyre_ages.length > 0 &&
-                visualizerData.positions.length > 0;
+                formattedStrategies[0].lap_times.length > 0 &&
+                formattedStrategies[0].fuel_levels.length > 0 &&
+                formattedStrategies[0].tyre_ages.length > 0 &&
+                formattedStrategies[0].positions.length > 0;
 
             if (!hasLapData) {
                 console.warn('⚠️ Insufficient lap-by-lap data for visualizer');
                 return;
             }
 
-            // Show visualizer section
             const vizSection = document.getElementById('lap-visualizer-section');
             vizSection.classList.remove('hidden');
 
-            // Destroy previous visualizer if it exists
             if (lapVisualizer) {
                 lapVisualizer.destroy();
             }
 
-            // Create and render the visualizer
+            // NEW: Pass the array of strategies to the visualizer
             lapVisualizer = new LapVisualizer({
                 containerId: 'lap-visualizer-container',
-                data: visualizerData,
+                strategies: formattedStrategies, 
                 theme: 'dark',
-                allStrategies: data.top_3_results,  // Pass all strategies for comparison
-                onLapSelect: (lapData) => {
-                    // Optional: Handle lap selection events
-                    console.log('User viewing lap:', lapData.lap);
-                }
             });
 
-            // Render the visualizer
             lapVisualizer.render();
 
-            // Smooth scroll to visualizer after a short delay
             setTimeout(() => {
                 const vizElement = document.getElementById('lap-visualizer-section');
                 if (vizElement) {
@@ -1125,7 +1187,154 @@
                 }
             }, 300);
         }
+    let trackChartInstance = null;
 
+async function showTrackMap() {
+    const raceName = document.getElementById('race_name').value;
+    if (!raceName) {
+        alert("Please select a race first.");
+        return;
+    }
+
+    // Open modal and show loading state
+    document.getElementById('track-modal').classList.remove('hidden');
+    document.getElementById('track-loading').classList.remove('hidden');
+    document.getElementById('track-modal-title').innerText = `${raceName} Layout`;
+
+    try {
+        const response = await fetch(`http://127.0.0.1:8000/api/track-layout/${encodeURIComponent(raceName)}`);
+        const data = await response.json();
+
+        if (data.error) {
+            alert("Sorry, track telemetry is not available for this circuit yet.");
+            closeTrackMap();
+            return;
+        }
+
+        // Format data for Chart.js scatter plot
+        const trackCoordinates = data.x.map((xVal, index) => ({
+            x: xVal,
+            y: data.y[index]
+        }));
+
+        renderTrackChart(trackCoordinates);
+
+    } catch (error) {
+        console.error("Error fetching track map:", error);
+        alert("Failed to load track map.");
+        closeTrackMap();
+    } finally {
+        document.getElementById('track-loading').classList.add('hidden');
+    }
+}
+
+function renderTrackChart(dataPoints) {
+    const ctx = document.getElementById('trackMapCanvas').getContext('2d');
+
+    // Destroy previous chart instance if it exists to prevent overlap
+    if (trackChartInstance) {
+        trackChartInstance.destroy();
+    }
+
+    trackChartInstance = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'Track Path',
+                data: dataPoints,
+                showLine: true,
+                borderColor: '#00d9ff', // Glowing Cyan
+                borderWidth: 4,
+                pointRadius: 0, // Hide dots, just show the continuous line
+                tension: 0.2    // Adds a slight smooth curve to the corners
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true, // Crucial: Prevents the track from stretching/squishing
+            animation: {
+                duration: 2000,
+                easing: 'easeOutQuart' // Cool effect: track draws itself in
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false }
+            },
+            scales: {
+                x: {
+                    display: false // Hide grid lines
+                },
+                y: {
+                    display: false, // Hide grid lines
+                    reverse: true   // Crucial: FastF1 Y-coordinates are inverted relative to HTML Canvas
+                }
+            }
+        }
+    });
+}
+
+function closeTrackMap() {
+    document.getElementById('track-modal').classList.add('hidden');
+}
+
+async function showDriverInfo() {
+    const driverInput = document.getElementById('driver_name').value;
+    if (!driverInput) {
+        alert("Please select a driver first.");
+        return;
+    }
+
+    const modal = document.getElementById('driver-modal');
+    const loading = document.getElementById('driver-loading');
+    modal.classList.remove('hidden');
+    loading.classList.remove('hidden');
+    window.closeDriverInfo = function() {
+    const modal = document.getElementById('driver-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+};
+
+// Bonus: Allow users to close the modal by clicking anywhere on the dark background
+document.addEventListener('click', function(event) {
+    const modal = document.getElementById('driver-modal');
+    // If the user clicked the dark backdrop (and not the card itself), close it
+    if (event.target === modal) {
+        window.closeDriverInfo();
+    }
+});
+
+    try {
+        const response = await fetch(`http://127.0.0.1:8000/api/driver-info/${encodeURIComponent(driverInput)}`);
+        const data = await response.json();
+
+        // THE FIX: Catch the error before trying to load undefined data
+        if (data.error) {
+            alert(data.error);
+            closeDriverInfo();
+            return;
+        }
+
+        // Populate the modal using the exact code from the backend
+        document.getElementById('driver-badge').innerText = data.code;
+        document.getElementById('modal-driver-name').innerText = data.name;
+        document.getElementById('modal-driver-team').innerText = data.team;
+        document.getElementById('modal-driver-country').innerText = data.country;
+        
+        document.getElementById('stat-champ').innerText = data.championships;
+        document.getElementById('stat-wins').innerText = data.wins;
+        document.getElementById('stat-podiums').innerText = data.podiums;
+        document.getElementById('stat-poles').innerText = data.poles;
+        document.getElementById('stat-starts').innerText = data.starts;
+
+    } catch (error) {
+        console.error("Error fetching driver info:", error);
+        alert("Failed to load driver profile.");
+        closeDriverInfo();
+    } finally {
+        loading.classList.add('hidden');
+    }
+}
     </script>
 </body>
 

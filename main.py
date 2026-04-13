@@ -6,13 +6,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict
 import os
-
-# Use the correct import based on your logic file's name
-# If your file is named 'simulate.py', use this:
+import re
+import requests
 from simulate import run_simulation
-# If your file is named 'simulation_logic.py', use this:
-# from simulation_logic import run_simulation
 
+DYNAMIC_DRIVER_CACHE = {}
 
 # --- Pydantic Models for Request/Response ---
 
@@ -167,6 +165,103 @@ async def simulate_strategy_endpoint(request: SimulationRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
+import fastf1 as ff1
+
+# Cache to store track maps in memory so subsequent clicks are instant
+TRACK_MAP_CACHE = {}
+
+@app.get("/api/track-layout/{race_name}")
+def get_track_layout(race_name: str):
+    """Fetches and caches the 2D X/Y coordinates of the track layout."""
+    if race_name in TRACK_MAP_CACHE:
+        return TRACK_MAP_CACHE[race_name]
+        
+    try:
+        # Enable cache to ensure fastf1 doesn't re-download data
+        ff1.Cache.enable_cache('fastf1_cache') 
+        
+        # Grab a recent qualifying session to get a clean lap
+        session = ff1.get_session(2023, race_name, 'Q') 
+        session.load(telemetry=True, weather=False, messages=False)
+        
+        fastest_lap = session.laps.pick_fastest()
+        telemetry = fastest_lap.get_telemetry()
+        
+        # Downsample: Take every 5th point to keep the payload lightweight
+        x_coords = telemetry['X'].iloc[::5].tolist()
+        y_coords = telemetry['Y'].iloc[::5].tolist()
+        
+        TRACK_MAP_CACHE[race_name] = {"x": x_coords, "y": y_coords}
+        return TRACK_MAP_CACHE[race_name]
+        
+    except Exception as e:
+        print(f"Error loading track map for {race_name}: {e}")
+        return {"error": "Could not load track data"}
+    
+@app.get("/api/driver-info/{driver_input}")
+def get_driver_info_dynamic(driver_input: str):
+    search_term = driver_input.lower().strip()
+    if search_term in DYNAMIC_DRIVER_CACHE:
+        return DYNAMIC_DRIVER_CACHE[search_term]
+        
+    headers = {"User-Agent": "F1StrategySimulator/1.1 (Educational Project)"}
+    
+    try:
+        # 1. Identity Check
+        drivers_req = requests.get("https://api.jolpi.ca/ergast/f1/2024/drivers.json", headers=headers, timeout=5)
+        drivers_data = drivers_req.json()
+        
+        driver_id, driver_code, full_name, nationality = None, "F1", "", "Unknown"
+        for d in drivers_data['MRData']['DriverTable']['Drivers']:
+            d_full = f"{d['givenName']} {d['familyName']}"
+            if search_term in [d_full.lower(), d.get('code', '').lower(), d['driverId'].lower()]:
+                driver_id, driver_code, full_name, nationality = d['driverId'], d.get('code', 'F1'), d_full, d['nationality']
+                break
+        
+        if not full_name:
+            return {"error": "Driver not found."}
+
+        # 2. Wikipedia Deep Scrape
+        wiki_title = full_name.replace(" ", "_")
+        wiki_url = f"https://en.wikipedia.org/w/api.php?action=parse&page={wiki_title}&prop=wikitext&format=json&redirects=1"
+        wiki_res = requests.get(wiki_url, headers=headers, timeout=5).json()
+        wikitext = wiki_res["parse"]["wikitext"]["*"]
+
+        def get_stat(field):
+            # NEW LOGIC: Look for the field name, skip the template characters {{...}}, 
+            # and grab the digits that follow.
+            pattern = rf"\|\s*{field}\s*=\s*(?:\{{{{2}}.*?\{{{{2}}|[^0-9])*(\d+)"
+            match = re.search(pattern, wikitext, re.IGNORECASE)
+            
+            if match:
+                return int(match.group(1))
+            
+            # Fallback: Search for the number anywhere in that specific line
+            line_match = re.search(rf"\|\s*{field}\s*=\s*.*?(\d+)", wikitext, re.IGNORECASE)
+            return int(line_match.group(1)) if line_match else 0
+
+        # Special logic for Entries (starts)
+        entries = get_stat("Entries")
+        if entries == 0: entries = get_stat("races") # fallback for older formatting
+
+        final_profile = {
+            "code": driver_code.upper(),
+            "name": full_name,
+            "team": "F1 Grid", 
+            "country": nationality,
+            "championships": get_stat("Championships"),
+            "wins": get_stat("wins"),
+            "podiums": get_stat("podiums"),
+            "poles": get_stat("poles"),
+            "starts": entries
+        }
+        
+        DYNAMIC_DRIVER_CACHE[search_term] = final_profile
+        return final_profile
+
+    except Exception as e:
+        return {"error": f"Stats Error: {str(e)}"}
 
 # --- Uvicorn runner (for local testing) ---
 if __name__ == "__main__":

@@ -1,15 +1,20 @@
 /**
  * F1 Lap Visualizer Component - Enhanced Edition
- * With visual track representation and F1 car animations
+ * With Custom UI Dropdown, strict sorting, and dynamic time deltas
  */
 
 class LapVisualizer {
   constructor(options = {}) {
     this.containerId = options.containerId || 'lap-visualizer-container';
-    this.data = options.data || null;
+    
+    // Accept an array of formatted strategies and strictly sort them by fastest time
+    this.strategies = options.strategies || [];
+    this.strategies.sort((a, b) => (a.total_time || 0) - (b.total_time || 0));
+    
+    this.data = this.strategies[0] || options.data || null; 
+    
     this.theme = options.theme || 'dark';
     this.onLapSelect = options.onLapSelect || (() => {});
-    this.allStrategies = options.allStrategies || [];
 
     this.currentLap = 0;
     this.selectedStrategy = 0;
@@ -44,34 +49,62 @@ class LapVisualizer {
     this.updateDisplay();
   }
 
+  getStrategyLabel(strategy, index) {
+    const name = strategy.strategy_name || 'Strategy';
+    
+    if (index === 0) {
+      return `
+        <span class="lv-opt-title">👑 Optimal: ${name}</span>
+        <span class="lv-opt-time">${this.formatTime(strategy.total_time)}</span>
+      `;
+    } else {
+      const delta = (strategy.total_time - this.strategies[0].total_time).toFixed(2);
+      return `
+        <span class="lv-opt-title">Alt: ${name}</span>
+        <span class="lv-opt-time">+${delta}s</span>
+      `;
+    }
+  }
+
   getHTMLTemplate() {
     return `
       <div class="lv-container">
-        <!-- Header with Driver Info -->
         <div class="lv-header">
           <div class="lv-header-content">
             <div class="lv-header-left">
               <div class="lv-car-icon">🏎️</div>
               <div class="lv-title-section">
                 <h2 class="lv-title">${this.data.driver_name || 'Driver'}</h2>
-                <p class="lv-subtitle">${this.data.race_name || 'Race'} • ${this.data.strategy_name || 'Optimal'}</p>
+                <p class="lv-subtitle">${this.data.race_name || 'Race'}</p>
               </div>
             </div>
-            <div class="lv-header-right">
+            
+            <div class="lv-header-right" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+              
+              <div class="lv-select-wrapper" id="lv-custom-dropdown">
+                <div class="lv-select-trigger" id="lv-select-trigger">
+                  <div id="lv-select-label" style="display: flex; width: 100%; justify-content: space-between; padding-right: 15px;">
+                    ${this.getStrategyLabel(this.strategies[this.selectedStrategy], this.selectedStrategy)}
+                  </div>
+                  <span class="lv-select-arrow">▼</span>
+                </div>
+                <div class="lv-select-options" id="lv-select-options">
+                  ${this.strategies.map((s, i) => `
+                    <div class="lv-option ${i === this.selectedStrategy ? 'selected' : ''}" data-index="${i}">
+                      ${this.getStrategyLabel(s, i)}
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+              
               <div class="lv-stat-badge">
                 <span class="lv-badge-label">LAPS</span>
                 <span class="lv-badge-value">${this.data.lap_times?.length || 0}</span>
               </div>
-              <div class="lv-stat-badge">
-                <span class="lv-badge-label">TIME</span>
-                <span class="lv-badge-value">${this.formatTime(this.data.total_time || 0)}</span>
-              </div>
-              ${this.getComparisonBadges()}
             </div>
           </div>
         </div>
 
-        <!-- Control Panel -->
         <div class="lv-controls-panel">
           <div class="lv-controls-row">
             <div class="lv-control-group">
@@ -82,7 +115,7 @@ class LapVisualizer {
 
             <div class="lv-control-group">
               <label>Speed:</label>
-              <select id="lv-speed-select" class="lv-select">
+              <select id="lv-speed-select" class="lv-select" style="max-width: 100px;">
                 <option value="0.5">0.5x</option>
                 <option value="1" selected>1x</option>
                 <option value="2">2x</option>
@@ -98,10 +131,8 @@ class LapVisualizer {
           </div>
         </div>
 
-        <!-- Live Lap Counter & Track Visualization -->
         <div class="lv-main-content">
           <div class="lv-left-panel">
-            <!-- Live Lap Counter -->
             <div class="lv-lap-counter">
               <div class="lv-counter-display">
                 <div class="lv-counter-label">Current Lap</div>
@@ -112,82 +143,84 @@ class LapVisualizer {
               </div>
             </div>
 
-            <!-- Lap Info Card -->
             <div class="lv-info-card">
               <h3 class="lv-card-title">⏱ LAP DATA</h3>
               <div class="lv-info-grid">
-                <div class="lv-info-item">
-                  <span class="lv-info-label">Time</span>
-                  <span class="lv-info-value" id="lv-info-time">-</span>
-                </div>
-                <div class="lv-info-item">
-                  <span class="lv-info-label">Position</span>
-                  <span class="lv-info-value" id="lv-info-position">-</span>
-                </div>
-                <div class="lv-info-item">
-                  <span class="lv-info-label">Fuel</span>
-                  <span class="lv-info-value" id="lv-info-fuel">-</span>
-                </div>
-                <div class="lv-info-item">
-                  <span class="lv-info-label">Tyre Age</span>
-                  <span class="lv-info-value" id="lv-info-tyre">-</span>
-                </div>
+                <div class="lv-info-item"><span class="lv-info-label">Time</span><span class="lv-info-value" id="lv-info-time">-</span></div>
+                <div class="lv-info-item"><span class="lv-info-label">Position</span><span class="lv-info-value" id="lv-info-position">-</span></div>
+                <div class="lv-info-item"><span class="lv-info-label">Fuel</span><span class="lv-info-value" id="lv-info-fuel">-</span></div>
+                <div class="lv-info-item"><span class="lv-info-label">Tyre Age</span><span class="lv-info-value" id="lv-info-tyre">-</span></div>
               </div>
             </div>
 
-            <!-- Pit Stop Timeline -->
             <div class="lv-pit-timeline">
               <h3 class="lv-card-title">🛑 PIT STOPS</h3>
               <div id="lv-pit-stops" class="lv-pit-list"></div>
             </div>
           </div>
 
-          <!-- Charts Section -->
           <div class="lv-right-panel">
-            <!-- Lap Times Chart -->
-            <div class="lv-chart-card">
-              <h3 class="lv-chart-title">🏁 Lap Performance</h3>
-              <canvas id="lv-chart-laptime" class="lv-chart"></canvas>
-            </div>
-
-            <!-- Fuel & Tyre Chart -->
-            <div class="lv-chart-card">
-              <h3 class="lv-chart-title">⛽ Fuel & Tyre Management</h3>
-              <canvas id="lv-chart-fueltyre" class="lv-chart"></canvas>
-            </div>
-
-            <!-- Position Chart -->
-            <div class="lv-chart-card">
-              <h3 class="lv-chart-title">📍 Position Evolution</h3>
-              <canvas id="lv-chart-position" class="lv-chart"></canvas>
-            </div>
+            <div class="lv-chart-card"><h3 class="lv-chart-title">🏁 Lap Performance</h3><canvas id="lv-chart-laptime" class="lv-chart"></canvas></div>
+            <div class="lv-chart-card"><h3 class="lv-chart-title">⛽ Fuel & Tyre Management</h3><canvas id="lv-chart-fueltyre" class="lv-chart"></canvas></div>
+            <div class="lv-chart-card"><h3 class="lv-chart-title">📍 Position Evolution</h3><canvas id="lv-chart-position" class="lv-chart"></canvas></div>
           </div>
         </div>
 
-        <!-- Footer Stats -->
         <div class="lv-footer">
-          <div class="lv-footer-stat">
-            <span class="lv-footer-label">Total Race Time</span>
-            <span class="lv-footer-value" id="lv-total-time">-</span>
-          </div>
-          <div class="lv-footer-stat">
-            <span class="lv-footer-label">Total Pit Stops</span>
-            <span class="lv-footer-value" id="lv-pit-count">-</span>
-          </div>
-          <div class="lv-footer-stat">
-            <span class="lv-footer-label">Final Position</span>
-            <span class="lv-footer-value" id="lv-final-pos">-</span>
-          </div>
-          <div class="lv-footer-stat">
-            <span class="lv-footer-label">Avg Lap Time</span>
-            <span class="lv-footer-value" id="lv-avg-time">-</span>
-          </div>
+          <div class="lv-footer-stat"><span class="lv-footer-label">Total Race Time</span><span class="lv-footer-value" id="lv-total-time">-</span></div>
+          <div class="lv-footer-stat"><span class="lv-footer-label">Total Pit Stops</span><span class="lv-footer-value" id="lv-pit-count">-</span></div>
+          <div class="lv-footer-stat"><span class="lv-footer-label">Final Position</span><span class="lv-footer-value" id="lv-final-pos">-</span></div>
+          <div class="lv-footer-stat"><span class="lv-footer-label">Avg Lap Time</span><span class="lv-footer-value" id="lv-avg-time">-</span></div>
         </div>
       </div>
     `;
   }
 
   attachEventListeners() {
+    // Custom Dropdown Logic
+    const trigger = document.getElementById('lv-select-trigger');
+    const optionsList = document.getElementById('lv-select-options');
+    const options = document.querySelectorAll('.lv-option');
+    const label = document.getElementById('lv-select-label');
+
+    if (trigger) {
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        optionsList.classList.toggle('open');
+        trigger.classList.toggle('active');
+      });
+
+      options.forEach(option => {
+        option.addEventListener('click', (e) => {
+          e.stopPropagation();
+          
+          // Visual update of selected option
+          options.forEach(opt => opt.classList.remove('selected'));
+          option.classList.add('selected');
+
+          // Retrieve index and update logic
+          const newIndex = parseInt(option.getAttribute('data-index'));
+          this.selectedStrategy = newIndex;
+          
+          // Update the label html
+          label.innerHTML = option.innerHTML;
+
+          // Close dropdown
+          optionsList.classList.remove('open');
+          trigger.classList.remove('active');
+
+          // Wipe and rebuild charts with new data
+          this.updateData(this.strategies[this.selectedStrategy]);
+        });
+      });
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', () => {
+        optionsList.classList.remove('open');
+        trigger.classList.remove('active');
+      });
+    }
+
     document.getElementById('lv-lap-slider').addEventListener('input', (e) => {
       this.currentLap = parseInt(e.target.value);
       this.stopAnimation();
@@ -210,6 +243,7 @@ class LapVisualizer {
   }
 
   createLaptimeChart() {
+    if (this.charts.laptime) this.charts.laptime.destroy();
     const ctx = document.getElementById('lv-chart-laptime').getContext('2d');
     const lapTimes = this.data.lap_times || [];
     const labels = lapTimes.map((_, i) => `L${i + 1}`);
@@ -244,6 +278,7 @@ class LapVisualizer {
   }
 
   createFuelTyreChart() {
+    if (this.charts.fueltyre) this.charts.fueltyre.destroy();
     const ctx = document.getElementById('lv-chart-fueltyre').getContext('2d');
     const fuel = this.data.fuel_levels || [];
     const tyreAge = this.data.tyre_ages || [];
@@ -293,6 +328,7 @@ class LapVisualizer {
   }
 
   createPositionChart() {
+    if (this.charts.position) this.charts.position.destroy();
     const ctx = document.getElementById('lv-chart-position').getContext('2d');
     const positions = this.data.positions || [];
     const labels = positions.map((_, i) => `L${i + 1}`);
@@ -356,9 +392,7 @@ class LapVisualizer {
       : '-';
     document.getElementById('lv-avg-time').textContent = typeof avgTime === 'string' ? avgTime + 's' : avgTime;
 
-    // Update pit stops
     this.updatePitStops();
-
     this.onLapSelect({ lap: this.currentLap, data: lapData });
   }
 
@@ -433,7 +467,12 @@ class LapVisualizer {
 
   updateData(newData) {
     this.data = newData;
-    this.reset();
+    this.stopAnimation();
+    
+    this.currentLap = 0;
+    const slider = document.getElementById('lv-lap-slider');
+    if (slider) slider.value = 0;
+    
     this.initializeCharts();
     this.updateDisplay();
   }
@@ -443,30 +482,6 @@ class LapVisualizer {
     Object.values(this.charts).forEach(chart => chart?.destroy?.());
     const container = document.getElementById(this.containerId);
     if (container) container.innerHTML = '';
-  }
-
-  getComparisonBadges() {
-    if (!this.allStrategies || this.allStrategies.length <= 1) return '';
-
-    const optimal = this.allStrategies[0];
-    let html = '<div class="lv-comparison-section" title="Compare strategies - hover to see differences">';
-
-    for (let i = 1; i < Math.min(3, this.allStrategies.length); i++) {
-      const strategy = this.allStrategies[i];
-      const timeDelta = (strategy.total_time_seconds || 0) - (optimal.total_time_seconds || 0);
-      const sign = timeDelta > 0 ? '+' : '';
-      const color = timeDelta > 0 ? '#ff6b6b' : '#51cf66';
-
-      html += `
-        <div class="lv-comparison-item" style="color: ${color}">
-          <span>${strategy.name}</span>
-          <span>${sign}${timeDelta.toFixed(2)}s</span>
-        </div>
-      `;
-    }
-
-    html += '</div>';
-    return html;
   }
 
   formatTime(seconds) {
