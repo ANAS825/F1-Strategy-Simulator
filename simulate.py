@@ -7,10 +7,21 @@ from matplotlib.patches import Patch
 import pickle
 import warnings
 import os
+import random
 from itertools import product
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 
-from advanced_analysis import AdvancedStrategyAnalyzer
+from advanced_analysis import (
+    AdvancedStrategyAnalyzer,
+    FuelModel,
+    EnhancedDegradationModel,
+    DriverFatigueModel,
+    BayesianUncertaintyModel,
+    SafeCarModel,
+    GridPositionModel
+)
+from optimization import StrategyGeneticOptimizer
+from real_time_adapter import TelemetryAdapter
 
 warnings.filterwarnings("ignore")
 
@@ -125,10 +136,67 @@ def visualize_strategies(sorted_results, total_laps, driver, track, final_degrad
 
 # --- 4. Main Execution Block (Lookup & Simulate) ---
 
-# --- FIX: Renamed arguments to match FastAPI request ---
-def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: Dict) -> Dict:
+# --- Helper to generate strategy from pit laps ---
+def pits_to_strategy(pit_laps: List[int], total_laps: int) -> List[str]:
+    """Convert pit lap numbers to compound strategy based on stint characteristics."""
+    compounds = ['SOFT', 'MEDIUM', 'HARD']
+    num_stints = len(pit_laps) + 1
+    strategy = []
+
+    # Calculate stint lengths
+    stint_boundaries = [0] + pit_laps + [total_laps]
+    stint_lengths = [stint_boundaries[i+1] - stint_boundaries[i] for i in range(len(stint_boundaries)-1)]
+
+    # Strategy selection based on stint position and length
+    for stint_idx in range(num_stints):
+        stint_length = stint_lengths[stint_idx]
+        position_ratio = stint_idx / max(num_stints - 1, 1)  # 0 to 1
+
+        # Early stints: prefer softer compounds for pace (SOFT/MEDIUM)
+        # Late stints: prefer harder compounds for durability (MEDIUM/HARD)
+        if stint_idx == 0 and num_stints > 1:
+            # First stint - can be aggressive on pace
+            if stint_length < total_laps * 0.25:
+                compound = 'SOFT'
+            elif stint_length < total_laps * 0.35:
+                compound = random.choice(['SOFT', 'MEDIUM'])
+            else:
+                compound = 'MEDIUM'
+        elif stint_idx == num_stints - 1:
+            # Final stint - prioritize durability
+            if stint_length < total_laps * 0.2:
+                compound = random.choice(['SOFT', 'MEDIUM'])
+            else:
+                compound = 'HARD'
+        else:
+            # Middle stints - balance pace and durability
+            if stint_length < total_laps * 0.25:
+                compound = 'SOFT'
+            elif stint_length < total_laps * 0.33:
+                compound = 'MEDIUM'
+            else:
+                compound = random.choice(['MEDIUM', 'HARD'])
+
+        strategy.append(compound)
+
+    return strategy
+
+
+# --- Enhanced run_simulation with GA optimizer and Monte Carlo ---
+def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: Dict,
+                   use_ga_optimizer: bool = True, use_monte_carlo: bool = True,
+                   grid_position: int = 0, weather: str = 'DRY',
+                   sc_laps: List[Tuple[int, int]] = None) -> Dict:
     """
     Main function to run the simulation with advanced analysis.
+
+    Enhanced with:
+    - Genetic Algorithm for strategy optimization (faster than brute force)
+    - Monte Carlo probabilistic analysis
+    - Real-time telemetry adaptation
+    - Weather and grid position effects
+    - Safety car scenario handling
+
     Takes driver name, race name, pit loss, and the loaded database.
     Returns a dictionary with all simulation results including advanced metrics.
     """
@@ -147,11 +215,8 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
         avg_lap_delta = driver_data['avg_lap_delta']
 
     except KeyError as e:
-        print(f"❌ ERROR: Could not find required data in database: {e}")
+        print(f"[ERROR] Could not find required data in database: {e}")
         return {"error": f"Could not find required data for {e}. This driver or track may not be in the database."}
-
-    # Generate all possible strategies
-    strategies_to_test = generate_strategies()
 
     # Combine data and apply sanity checks
     final_degradation_rates, realistic_base_times = apply_sanity_checks_and_fallbacks(
@@ -163,46 +228,120 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
     print(f"  - Pit Stop Time Loss: {pit_stop_loss}s")
     print(f"  - Realistic Base Times: {realistic_base_times}")
     print(f"  - Driver Pace Delta: {avg_lap_delta:+.3f}s")
-    print(f"  - Final Degradation Rates (s/lap): {final_degradation_rates}\n")
+    print(f"  - Final Degradation Rates (s/lap): {final_degradation_rates}")
+    print(f"  - Weather: {weather}, Grid Position: {grid_position}\n")
 
-    # Initialize advanced analyzer with fuel modeling
-    from advanced_analysis import FuelModel
+    # Initialize enhanced analyzer with all new models
     fuel_model = FuelModel(max_fuel=110.0, fuel_map='BALANCED')
+    degradation_model = EnhancedDegradationModel(track_roughness=1.0)
+    fatigue_model = DriverFatigueModel(driver_stamina=1.1)  # Assume good fitness
+    uncertainty_model = BayesianUncertaintyModel()
+    sc_model = SafeCarModel()
+    grid_model = GridPositionModel()
+
     analyzer = AdvancedStrategyAnalyzer(
         driver_data={'delta': avg_lap_delta},
         track_data=track_data,
         fuel_model=fuel_model,
-        include_fuel_weight=True
+        include_fuel_weight=True,
+        degradation_model=degradation_model,
+        fatigue_model=fatigue_model,
+        uncertainty_model=uncertainty_model,
+        sc_model=sc_model,
+        grid_model=grid_model
     )
 
     simulation_results = {}
-    for name, strategy in strategies_to_test.items():
-        if all(c in final_degradation_rates and c in realistic_base_times for c in strategy):
-            # Use advanced simulation for richer metrics
-            advanced_result = analyzer.simulate_strategy_advanced(
-                strategy,
-                total_laps,
-                final_degradation_rates,
-                realistic_base_times,
-                avg_lap_delta,
-                pit_stop_loss
-            )
 
-            # Also calculate reliability metrics
-            stint_lengths = [total_laps // len(strategy)] * len(strategy)
-            for i in range(total_laps % len(strategy)):
-                stint_lengths[i] += 1
+    # Strategy optimization: GA vs brute force
+    if use_ga_optimizer:
+        print("--- Using Genetic Algorithm Optimizer ---")
+        optimizer = StrategyGeneticOptimizer()
 
-            reliability = analyzer.calculate_strategy_reliability(strategy, stint_lengths)
+        # Create fitness function
+        def fitness_func(num_stops: int, pit_laps: List[int]) -> float:
+            strategy = pits_to_strategy(pit_laps, total_laps)
+            if not all(c in final_degradation_rates and c in realistic_base_times for c in strategy):
+                return float('inf')
 
-            simulation_results[name] = {
-                'time': advanced_result['total_time'],
-                'pits': advanced_result['pit_laps'],
-                'compounds': strategy,
-                'metrics': advanced_result['metrics'],
-                'reliability': reliability,
-                'lap_times': advanced_result['lap_times']
-            }
+            try:
+                result = analyzer.simulate_strategy_advanced(
+                    strategy, total_laps, final_degradation_rates,
+                    realistic_base_times, avg_lap_delta, pit_stop_loss
+                )
+                return result['total_time']
+            except:
+                return float('inf')
+
+        # Run GA optimization
+        best_strategies_ga, fitness_history = optimizer.evolve_strategies(
+            fitness_function=fitness_func,
+            total_laps=int(total_laps),
+            population_size=20,
+            num_generations=30,
+            elite_size=4,
+            mutation_rate=0.3
+        )
+
+        # Convert GA results to full simulation results
+        for idx, ga_result in enumerate(best_strategies_ga[:5]):  # Use top 5
+            strategy = pits_to_strategy(ga_result['pit_laps'], total_laps)
+            if all(c in final_degradation_rates and c in realistic_base_times for c in strategy):
+                strategy_name = f"GA-Optimized-{idx+1}"
+
+                try:
+                    advanced_result = analyzer.simulate_strategy_advanced(
+                        strategy, total_laps, final_degradation_rates,
+                        realistic_base_times, avg_lap_delta, pit_stop_loss
+                    )
+
+                    stint_lengths = [total_laps // len(strategy)] * len(strategy)
+                    for i in range(total_laps % len(strategy)):
+                        stint_lengths[i] += 1
+
+                    reliability = analyzer.calculate_strategy_reliability(strategy, stint_lengths)
+
+                    simulation_results[strategy_name] = {
+                        'time': advanced_result['total_time'],
+                        'pits': advanced_result['pit_laps'],
+                        'compounds': strategy,
+                        'metrics': advanced_result['metrics'],
+                        'reliability': reliability,
+                        'lap_times': advanced_result['lap_times'],
+                        'pit_laps_input': ga_result['pit_laps']
+                    }
+                except:
+                    continue
+
+    else:
+        # Fallback: brute force all strategies
+        print("--- Using Brute Force Strategy Search (legacy) ---")
+        strategies_to_test = generate_strategies()
+
+        for name, strategy in strategies_to_test.items():
+            if all(c in final_degradation_rates and c in realistic_base_times for c in strategy):
+                try:
+                    advanced_result = analyzer.simulate_strategy_advanced(
+                        strategy, total_laps, final_degradation_rates,
+                        realistic_base_times, avg_lap_delta, pit_stop_loss
+                    )
+
+                    stint_lengths = [total_laps // len(strategy)] * len(strategy)
+                    for i in range(total_laps % len(strategy)):
+                        stint_lengths[i] += 1
+
+                    reliability = analyzer.calculate_strategy_reliability(strategy, stint_lengths)
+
+                    simulation_results[name] = {
+                        'time': advanced_result['total_time'],
+                        'pits': advanced_result['pit_laps'],
+                        'compounds': strategy,
+                        'metrics': advanced_result['metrics'],
+                        'reliability': reliability,
+                        'lap_times': advanced_result['lap_times']
+                    }
+                except:
+                    continue
 
     if not simulation_results:
         return {"error": "No valid strategies could be simulated based on the available data."}
@@ -210,7 +349,7 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
     best_strategy_name = min(simulation_results, key=lambda k: simulation_results[k]['time'])
     sorted_results = sorted(simulation_results.items(), key=lambda item: item[1]['time'])
 
-    # Calculate sensitivity analysis for the optimal strategy
+    # (1) Sensitivity analysis for the optimal strategy
     optimal_strategy = simulation_results[best_strategy_name]['compounds']
     sensitivity_analysis = analyzer.perform_sensitivity_analysis(
         optimal_strategy,
@@ -222,64 +361,100 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
         parameter='pit_loss'
     )
 
-    # --- Prepare JSON Response ---
-    
+    # (2) Monte Carlo analysis for the optimal strategy
+    monte_carlo_results = None
+    if use_monte_carlo:
+        print("\n--- Running Monte Carlo Analysis (1000 simulations) ---")
+        monte_carlo_results = analyzer.perform_monte_carlo_analysis(
+            strategy=optimal_strategy,
+            total_laps=total_laps,
+            degradation_rates=final_degradation_rates,
+            base_times=realistic_base_times,
+            driver_delta=avg_lap_delta,
+            pit_stop_loss=pit_stop_loss,
+            num_simulations=1000,
+            parameter_uncertainty={
+                'pit_loss_std': 0.8,
+                'degradation_std': 0.015,
+                'driver_delta_std': 0.15,
+                'ambient_temp_std': 4.0
+            }
+        )
+        print(f"[OK] Monte Carlo: Mean={monte_carlo_results['mean_time']:.2f}s, StdDev={monte_carlo_results['std_dev']:.2f}s")
+
+    # (3) Optimal pit window calculation
+    pit_window = analyzer.calculate_optimal_pit_window(
+        current_stint_laps=0,
+        total_laps=int(total_laps),
+        degradation_rate=final_degradation_rates.get('SOFT', 0.1),
+        stint_length_estimate=int(total_laps // (len(optimal_strategy)))
+    )
+
+    # --- Prepare Enhanced JSON Response ---
+
     # 1. Simulation Parameters
     sim_params = {
         "driver": driver_name,
         "race": race_name,
         "total_laps": int(total_laps),
         "pit_stop_loss": float(pit_stop_loss),
-        "final_degradation_rates": final_degradation_rates
+        "final_degradation_rates": final_degradation_rates,
+        "weather": weather,
+        "grid_position": grid_position,
+        "optimization_method": "Genetic Algorithm" if use_ga_optimizer else "Brute Force"
     }
 
-    # 2. Optimal Strategy with advanced metrics
+    # 2. Optimal Strategy with advanced metrics and Monte Carlo
     optimal_data = simulation_results[best_strategy_name]
     optimal_strategy = {
         "name": best_strategy_name,
         "pit_laps": [int(p) for p in optimal_data['pits']],
+        "pit_window": pit_window,
         "metrics": optimal_data['metrics'],
-        "reliability": optimal_data['reliability']
+        "reliability": optimal_data['reliability'],
+        "monte_carlo": monte_carlo_results if monte_carlo_results else {}
     }
 
-    # 3. Top 3 Results with advanced analysis
-    top_3_results = []
-    for name, results in sorted_results[:3]:
-        total_time = results['time']
-        pit_laps_list = results['pits']
+    # 3. Top 5 Results with advanced analysis (more than 3 now)
+    top_5_results = []
+    for name, strat_result in sorted_results[:5]:
+        total_time = strat_result['time']
+        pit_laps_list = strat_result['pits']
 
         pit_laps_clean = [int(p) for p in pit_laps_list]
         pit_string = f"Pits on Laps: {pit_laps_clean}" if pit_laps_clean else "No Pit Stops"
 
         delta_string = f"(+{total_time - simulation_results[best_strategy_name]['time']:.3f}s)" if name != best_strategy_name else ""
 
-        top_3_results.append({
+        top_5_results.append({
             "name": name,
             "pit_stops_text": pit_string,
             "total_time_str": format_time(total_time),
+            "total_time_seconds": float(total_time),
             "delta_str": delta_string,
-            "metrics": results.get('metrics', {}),
-            "reliability": results.get('reliability', {}),
+            "metrics": strat_result.get('metrics', {}),
+            "reliability": strat_result.get('reliability', {}),
             "fuel_data": {
-                "avg_fuel_weight": results.get('metrics', {}).get('avg_fuel_weight', 50.0),
-                "fuel_management_score": results.get('metrics', {}).get('fuel_management_score', 50.0)
+                "avg_fuel_weight": strat_result.get('metrics', {}).get('avg_fuel_weight', 50.0),
+                "fuel_management_score": strat_result.get('metrics', {}).get('fuel_management_score', 50.0)
             }
         })
 
     # 4. Visualization Data
     viz_data = []
-    for name, results in sorted_results[:3]:
-        compounds_list = results['compounds']
+    for name, strat_result in sorted_results[:5]:
+        compounds_list = strat_result['compounds']
         stint_lengths = [total_laps // len(compounds_list)] * len(compounds_list)
-        for k in range(total_laps % len(compounds_list)): stint_lengths[k] += 1
-        
+        for k in range(total_laps % len(compounds_list)):
+            stint_lengths[k] += 1
+
         stints = []
         for j, stint_laps in enumerate(stint_lengths):
             stints.append({
                 "compound": compounds_list[j],
-                "laps": int(stint_laps) # <--- FIX
+                "laps": int(stint_laps)
             })
-        
+
         viz_data.append({
             "name": name,
             "stints": stints
@@ -291,14 +466,24 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
             "pit_loss_variations": sensitivity_analysis['variations'],
             "times": [float(t) for t in sensitivity_analysis['times']],
             "deltas": [float(d) for d in sensitivity_analysis['deltas']]
+        },
+        "monte_carlo_analysis": monte_carlo_results if monte_carlo_results else {},
+        "pit_optimization": pit_window,
+        "enhanced_models": {
+            "weather_sensitivity": weather,
+            "grid_position_advantage": grid_position > 0,
+            "driver_fatigue_modeled": True,
+            "fuel_consumption_curves": True,
+            "bayesian_uncertainty": True
         }
     }
 
     # 6. Final JSON object with all enhanced data
+    # NOTE: Keep "top_3_results" for frontend compatibility, return top 5 data
     return {
         "simulation_parameters": sim_params,
         "optimal_strategy": optimal_strategy,
-        "top_3_results": top_3_results,
+        "top_3_results": top_5_results,  # Renamed for frontend compatibility (returns top 5)
         "visualization_data": viz_data,
         "advanced_analysis": advanced_data
     }

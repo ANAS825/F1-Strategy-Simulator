@@ -84,7 +84,6 @@
     <div class="min-h-screen flex flex-col">
         <div class="container mx-auto px-4 py-8 md:py-12 max-w-6xl flex-1">
 
-            <!-- Header -->
             <header class="text-center mb-12 md:mb-16">
                 <div class="mb-4">
                     <h1 class="text-5xl md:text-6xl font-bold text-white mb-3 tracking-tight">
@@ -96,11 +95,9 @@
                 </p>
             </header>
 
-            <!-- Simulation Form -->
             <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 md:p-8 mb-10 card-hover shadow-2xl">
                 <form id="simulation-form" class="form-grid grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6">
 
-                <!-- Driver Selection -->
                 <div>
                     <label for="driver_name" class="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">Driver</label>
                     <select id="driver_name" name="driver_name"
@@ -109,7 +106,6 @@
                     </select>
                 </div>
 
-                <!-- Race Selection -->
                 <div>
                     <label for="race_name" class="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">Race</label>
                     <select id="race_name" name="race_name"
@@ -118,21 +114,18 @@
                     </select>
                 </div>
 
-                <!-- Pit Stop Loss -->
                 <div>
                     <label for="pit_stop_loss" class="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">Pit Loss (s)</label>
                     <input type="number" id="pit_stop_loss" name="pit_stop_loss" value="22" step="0.1"
                         class="w-full bg-slate-700/50 border border-slate-600/50 text-white rounded-lg p-3 input-focus focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition text-sm">
                 </div>
 
-                <!-- Total Laps (Read-only) -->
                 <div>
                     <label for="total_laps_input" class="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">Total Laps</label>
                     <input type="text" id="total_laps_input" name="total_laps_input" value="N/A" readonly
                         class="w-full bg-slate-600/30 border border-slate-600/30 text-slate-400 rounded-lg p-3 cursor-not-allowed text-sm font-medium">
                 </div>
 
-                <!-- Submit Button -->
                 <div class="md:col-span-4 pt-2">
                     <button type="submit" id="run-simulation-btn"
                         class="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out flex items-center justify-center shadow-lg hover:shadow-xl">
@@ -148,44 +141,35 @@
             </form>
         </div>
 
-        <!-- Error Display -->
         <div id="error-display" class="bg-red-500/10 border border-red-500/30 text-red-300 p-4 rounded-lg mb-8 hidden backdrop-blur-sm"
             role="alert">
             <p class="font-semibold text-sm">⚠ Error</p>
             <p id="error-text" class="text-sm mt-1">Something went wrong.</p>
         </div>
 
-        <!-- Results Section -->
         <div id="results-section" class="hidden animation-fade-in">
-            <!-- Summary of Top 3 -->
             <div class="mb-12">
                 <h2 class="text-2xl md:text-3xl font-bold text-white mb-6 flex items-center">
                     <span class="w-1 h-8 bg-gradient-to-b from-cyan-500 to-blue-500 rounded-full mr-3"></span>
                     Top Strategies
                 </h2>
                 <div id="results-summary" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <!-- Results will be injected here by JavaScript -->
-                </div>
+                    </div>
             </div>
 
-            <!-- Insights Toggle -->
             <div class="mb-12">
                 <button id="toggle-insights" class="bg-blue-500/20 border border-blue-500/50 text-blue-300 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-blue-500/30">
                     💡 Show Detailed Analysis
                 </button>
             </div>
 
-            <!-- Detailed Insights Section -->
             <div id="insights-section" class="mb-12 hidden">
-                <!-- Strategy Insights -->
                 <div class="mb-8">
                     <h3 class="text-xl font-bold text-white mb-4">📊 Strategy Breakdown</h3>
                     <div id="strategy-details" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <!-- Detailed strategy cards will be injected here -->
-                    </div>
+                        </div>
                 </div>
 
-                <!-- Comparative Analysis -->
                 <div class="mb-8">
                     <h3 class="text-xl font-bold text-white mb-4">⚖️ Comparative Analysis</h3>
                     <div class="bg-slate-800/50 border border-slate-700/50 rounded-lg p-6 overflow-x-auto">
@@ -193,7 +177,6 @@
                     </div>
                 </div>
 
-                <!-- Sensitivity Analysis -->
                 <div>
                     <h3 class="text-xl font-bold text-white mb-4">📈 Sensitivity to Pit Loss Time</h3>
                     <div class="bg-slate-800/50 border border-slate-700/50 rounded-lg p-6">
@@ -202,25 +185,21 @@
                 </div>
             </div>
 
-            <!-- Tyre Degradation Display -->
             <div class="mb-12">
                 <h2 class="text-2xl md:text-3xl font-bold text-white mb-6 flex items-center">
                     <span class="w-1 h-8 bg-gradient-to-b from-cyan-500 to-blue-500 rounded-full mr-3"></span>
                     Tyre Degradation
                 </h2>
                 <div id="degradation-summary" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <!-- Degradation data will be injected here -->
-                </div>
+                    </div>
             </div>
 
-            <!-- Visualization -->
             <div>
                 <h2 class="text-2xl md:text-3xl font-bold text-white mb-6 flex items-center">
                     <span class="w-1 h-8 bg-gradient-to-b from-cyan-500 to-blue-500 rounded-full mr-3"></span>
                     Strategy Analysis
                 </h2>
 
-                <!-- Chart Tabs -->
                 <div class="flex gap-2 mb-6 flex-wrap">
                     <button class="chart-tab active bg-cyan-500/20 border border-cyan-500/50 text-cyan-300 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-cyan-500/30" data-chart="stints">
                         Lap Distribution
@@ -233,17 +212,14 @@
                     </button>
                 </div>
 
-                <!-- Stints Chart -->
                 <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 md:p-8 shadow-2xl card-hover chart-container" id="stints-container">
                     <canvas id="strategy-chart"></canvas>
                 </div>
 
-                <!-- Time Analysis Chart -->
                 <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 md:p-8 shadow-2xl card-hover chart-container hidden" id="timeanalysis-container">
                     <canvas id="time-analysis-chart"></canvas>
                 </div>
 
-                <!-- Composition Chart -->
                 <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 md:p-8 shadow-2xl card-hover chart-container hidden" id="composition-container">
                     <div class="max-w-sm mx-auto">
                         <canvas id="composition-chart"></canvas>
@@ -444,8 +420,8 @@
             document.getElementById('insights-section').classList.add('hidden');
             document.getElementById('toggle-insights').textContent = '💡 Show Detailed Analysis';
 
-            // 2. Populate Top 3 Results
-            data.top_3_results.forEach((result, index) => {
+            // 2. Populate Top Results (First 3)
+            data.top_3_results.slice(0, 3).forEach((result, index) => {
                 const isOptimal = index === 0;
                 const card = document.createElement('div');
                 card.className = `p-6 rounded-lg transition-all card-hover ${isOptimal ? 'bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-2 border-cyan-400/50 shadow-lg shadow-cyan-500/10' : 'bg-slate-800/30 border border-slate-700/50 hover:border-slate-600/50'}`;
@@ -858,7 +834,7 @@
             const detailsEl = document.getElementById('strategy-details');
             detailsEl.innerHTML = '';
 
-            data.top_3_results.forEach((result, idx) => {
+            data.top_3_results.slice(0, 3).forEach((result, idx) => {
                 const isOptimal = idx === 0;
                 const vizData = data.visualization_data[idx];
 
@@ -907,8 +883,9 @@
         function renderComparisonChart(data) {
             const ctx = document.getElementById('comparison-chart').getContext('2d');
 
-            const strategies = data.top_3_results.map(r => r.name);
-            const times = data.top_3_results.map((r, idx) => {
+            const topThree = data.top_3_results.slice(0, 3);
+            const strategies = topThree.map(r => r.name);
+            const times = topThree.map((r, idx) => {
                 const gap = r.delta_str ? parseFloat(r.delta_str.match(/[\d.]+/)[0]) : 0;
                 return idx === 0 ? 0 : gap;
             });
@@ -1056,4 +1033,3 @@
 </body>
 
 </html>
-

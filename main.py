@@ -18,6 +18,11 @@ class SimulationRequest(BaseModel):
     driver_name: str
     race_name: str
     pit_stop_loss: float
+    grid_position: int = 0  # Optional: driver's grid position (0 = pole, field_size = last)
+    weather: str = 'DRY'    # Optional: weather condition
+    use_ga_optimizer: bool = True  # Optional: use Genetic Algorithm (default) or brute force
+    use_monte_carlo: bool = True   # Optional: enable Monte Carlo analysis
+    sc_laps: List[List[int]] = []  # Optional: safety car info [[start_lap, duration], ...]
 
 class LapsResponse(BaseModel):
     total_laps: int
@@ -37,13 +42,13 @@ def load_database():
     try:
         with open(DB_FILE, 'rb') as f:
             strategy_database = pickle.load(f)
-        print(f"✅ Master database loaded successfully from {DB_FILE}")
+        print(f"[OK] Master database loaded successfully from {DB_FILE}")
     except FileNotFoundError:
-        print(f"❌ ERROR: '{DB_FILE}' not found.")
+        print(f"[ERROR] '{DB_FILE}' not found.")
         print("Please ensure 'precompute.py' has run and the file is in the same directory.")
         strategy_database = {} # Ensure it's an empty dict
     except Exception as e:
-        print(f"❌ An unexpected error occurred loading the database: {e}")
+        print(f"[ERROR] An unexpected error occurred loading the database: {e}")
         strategy_database = {}
 
 # --- FastAPI App Initialization ---
@@ -109,28 +114,40 @@ async def get_laps_for_race(race_name: str):
 
 @app.post("/simulate")
 async def simulate_strategy_endpoint(request: SimulationRequest):
-    """Runs the main simulation logic."""
+    """Runs the main simulation logic with advanced features."""
     if not strategy_database:
         raise HTTPException(status_code=503, detail="Database not loaded. Run precompute.py and restart server.")
 
     print(f"--- Simulating for {request.driver_name} at {request.race_name} ---")
-    
+    print(f"    Weather: {request.weather}, Grid Position: {request.grid_position}")
+    print(f"    GA Optimizer: {request.use_ga_optimizer}, Monte Carlo: {request.use_monte_carlo}")
+
     try:
+        # Convert safety car laps from list to tuple format
+        sc_laps = [(sc[0], sc[1]) for sc in request.sc_laps] if request.sc_laps else None
+
         results = run_simulation(
             driver_name=request.driver_name,
             race_name=request.race_name,
             pit_stop_loss=request.pit_stop_loss,
-            db=strategy_database
+            db=strategy_database,
+            use_ga_optimizer=request.use_ga_optimizer,
+            use_monte_carlo=request.use_monte_carlo,
+            grid_position=request.grid_position,
+            weather=request.weather,
+            sc_laps=sc_laps
         )
-        
+
         if "error" in results:
             raise HTTPException(status_code=404, detail=results["error"])
-            
+
         return results
-        
+
     except Exception as e:
         print(f"❌ ERROR during simulation: {e}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 # --- Uvicorn runner (for local testing) ---
 if __name__ == "__main__":
