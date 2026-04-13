@@ -1,9 +1,11 @@
 import pickle
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict
+import os
 
 # Use the correct import based on your logic file's name
 # If your file is named 'simulate.py', use this:
@@ -63,6 +65,23 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+
+# --- Serve Static Files (Lap Visualizer Component) ---
+@app.get("/lap-visualizer.js", response_class=FileResponse)
+async def get_lap_visualizer_js():
+    """Serves the lap visualizer JavaScript component."""
+    if os.path.exists("lap-visualizer.js"):
+        return FileResponse("lap-visualizer.js", media_type="application/javascript")
+    else:
+        raise HTTPException(status_code=404, detail="lap-visualizer.js not found")
+
+@app.get("/lap-visualizer.css", response_class=FileResponse)
+async def get_lap_visualizer_css():
+    """Serves the lap visualizer CSS styling."""
+    if os.path.exists("lap-visualizer.css"):
+        return FileResponse("lap-visualizer.css", media_type="text/css")
+    else:
+        raise HTTPException(status_code=404, detail="lap-visualizer.css not found")
 
 @app.on_event("startup")
 async def startup_event():

@@ -182,6 +182,55 @@ def pits_to_strategy(pit_laps: List[int], total_laps: int) -> List[str]:
     return strategy
 
 
+def _apply_strategy_variation(lap_times, compounds, pit_laps):
+    """Apply strategy-specific variations to lap times based on tire compounds."""
+    if not lap_times or len(lap_times) == 0:
+        return lap_times
+
+    varied_times = [float(t) for t in lap_times]
+    stint_idx = 0
+    lap_in_stint = 0
+    pit_laps_set = set(pit_laps)
+
+    # Compound tire characteristics - SOFT faster but degrades, HARD slower but consistent
+    compound_base = {'SOFT': -1.5, 'MEDIUM': 0, 'HARD': 1.2}
+    compound_degradation = {'SOFT': 0.12, 'MEDIUM': 0.06, 'HARD': 0.02}
+
+    stint_lengths = {}
+    current_stint = 0
+    laps_counted = 0
+
+    # Calculate stint lengths
+    for compound in compounds:
+        if compound not in stint_lengths:
+            stint_lengths[current_stint] = 0
+        stint_lengths[current_stint] += 1
+        if current_stint < len(compounds) - 1 and laps_counted + 1 in pit_laps_set:
+            current_stint += 1
+
+    for lap_idx in range(len(varied_times)):
+        lap_num = lap_idx + 1
+
+        # Check if pit stop (reset stint)
+        if lap_num in pit_laps_set and stint_idx < len(compounds) - 1:
+            stint_idx += 1
+            lap_in_stint = 1
+        else:
+            lap_in_stint += 1
+
+        compound = compounds[stint_idx] if stint_idx < len(compounds) else 'MEDIUM'
+        base_delta = compound_base.get(compound, 0)
+        deg_rate = compound_degradation.get(compound, 0.06)
+
+        # Apply: base delta + degradation over stint + random
+        degradation = (lap_in_stint - 1) * deg_rate
+        variation = base_delta + degradation + random.uniform(-0.3, 0.3)
+
+        varied_times[lap_idx] = max(70, varied_times[lap_idx] + variation)
+
+    return varied_times
+
+
 # --- Enhanced run_simulation with GA optimizer and Monte Carlo ---
 def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: Dict,
                    use_ga_optimizer: bool = True, use_monte_carlo: bool = True,
@@ -426,18 +475,94 @@ def run_simulation(driver_name: str, race_name: str, pit_stop_loss: float, db: D
 
         delta_string = f"(+{total_time - simulation_results[best_strategy_name]['time']:.3f}s)" if name != best_strategy_name else ""
 
+        # Extract pit stop data for visualizer
+        pit_stops = []
+        for pit_lap in pit_laps_clean:
+            pit_stops.append({
+                "lap": int(pit_lap),
+                "duration": 2.5  # Average pit stop duration
+            })
+
+        # Generate tyre ages based on pit stops
+        tyre_ages = []
+        tyre_age = 0
+        for lap in range(1, total_laps + 1):
+            if lap in pit_laps_clean:
+                tyre_age = 0
+            tyre_ages.append(tyre_age)
+            tyre_age += 1
+
+        # Generate fuel levels - realistic consumption based on strategy compounds
+        fuel_levels = []
+        fuel = 110.0
+        compounds = strat_result.get('compounds', ['MEDIUM'])
+        stint_lengths = [total_laps // len(compounds)] * len(compounds)
+        for i in range(total_laps % len(compounds)):
+            stint_lengths[i] += 1
+
+        stint_idx = 0
+        lap_in_stint = 0
+        fuel_consumption = {'SOFT': 1.3, 'MEDIUM': 1.2, 'HARD': 1.0}
+
+        for lap in range(1, total_laps + 1):
+            if lap_in_stint >= stint_lengths[stint_idx] and stint_idx < len(compounds) - 1:
+                stint_idx += 1
+                lap_in_stint = 0
+                fuel = 110.0
+
+            consumption = fuel_consumption.get(compounds[stint_idx], 1.2)
+            fuel_levels.append(max(0, fuel))
+            fuel -= consumption
+            lap_in_stint += 1
+
+        # Generate realistic positions based on strategy time delta
+        positions = []
+        time_delta = total_time - simulation_results[best_strategy_name]['time']
+
+        # Start position based on time delta (faster = better starting position)
+        start_pos = 1 if time_delta < 0.5 else (2 if time_delta < 2 else 3)
+        current_pos = start_pos
+
+        for lap in range(1, total_laps + 1):
+            # Simulate overtaking/being overtaken near pit stops
+            if lap in pit_laps_clean:
+                # Chance to gain position during pit stop
+                current_pos = max(1, current_pos - 1) if lap % 2 == 0 else current_pos
+
+            # Slight position variation during race
+            if lap % 15 == 0 and random.random() > 0.6:
+                current_pos = min(20, current_pos + 1)
+            elif lap % 20 == 0 and random.random() > 0.7 and current_pos > 1:
+                current_pos -= 1
+
+            positions.append(min(20, max(1, current_pos)))
+
         top_5_results.append({
             "name": name,
             "pit_stops_text": pit_string,
             "total_time_str": format_time(total_time),
+            "total_time": float(total_time),
             "total_time_seconds": float(total_time),
             "delta_str": delta_string,
+            "position": 1,  # This would be calculated from race position
             "metrics": strat_result.get('metrics', {}),
             "reliability": strat_result.get('reliability', {}),
             "fuel_data": {
                 "avg_fuel_weight": strat_result.get('metrics', {}).get('avg_fuel_weight', 50.0),
                 "fuel_management_score": strat_result.get('metrics', {}).get('fuel_management_score', 50.0)
-            }
+            },
+            # Add lap-by-lap data with strategy-specific variations
+            "lap_times": _apply_strategy_variation(
+                strat_result.get('lap_times', []),
+                strat_result.get('compounds', []),
+                pit_laps_clean
+            ),
+            "compound_strategy": '-'.join([c[0] for c in strat_result.get('compounds', [])]),  # e.g., S-M-H
+            "fuel_levels": fuel_levels,
+            "tyre_ages": tyre_ages,
+            "positions": positions,
+            "pit_stops": pit_stops,
+            "strategy_name": name
         })
 
     # 4. Visualization Data
