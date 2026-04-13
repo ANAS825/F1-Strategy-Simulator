@@ -1,278 +1,183 @@
-"""
-Genetic Algorithm-based Strategy Optimizer
-Evolves pit stop strategies to find optimal combinations instead of brute force.
-"""
-
-import numpy as np
-from typing import List, Dict, Callable, Tuple
 import random
-
+import numpy as np
+from typing import List, Tuple, Dict, Callable, Any
 
 class StrategyGeneticOptimizer:
-    """
-    Uses genetic algorithm to optimize F1 pit stop strategies.
+    """Genetic Algorithm for optimizing F1 pit stop strategies and tire compounds"""
 
-    Genes: pit stop count (1-4) and timing (which lap to stop)
-    Fitness: Total race time (lower is better)
-    """
+    AVAILABLE_COMPOUNDS = ['SOFT', 'MEDIUM', 'HARD']
 
-    def __init__(self, seed: int = None):
-        """Initialize optimizer with random seed for reproducibility."""
-        if seed is None:
-            seed = np.random.randint(0, 10000)  # Use random seed for diverse results
+    def __init__(self, seed: int = 42):
+        self.seed = seed
         random.seed(seed)
         np.random.seed(seed)
-        self.seed = seed
-        self.best_fitness_history = []
-
-    def encode_strategy(self, num_stops: int, pit_laps: List[int]) -> List[int]:
-        """
-        Encode a strategy as a gene (list of ints).
-        Gene format: [num_stops, pit_lap1, pit_lap2, pit_lap3, ...]
-
-        Args:
-            num_stops: Number of pit stops (1-3)
-            pit_laps: List of lap numbers for each pit stop
-
-        Returns:
-            Encoded gene
-        """
-        gene = [num_stops] + sorted(pit_laps)[:num_stops]
-        # Pad to fixed length (3 stops max)
-        while len(gene) < 4:
-            gene.append(0)
-        return gene[:4]
-
-    def decode_strategy(self, gene: List[int], total_laps: int) -> Tuple[int, List[int]]:
-        """
-        Decode a gene back to strategy parameters.
-
-        Returns:
-            (num_stops, pit_laps)
-        """
-        num_stops = gene[0]
-        pit_laps = sorted([p for p in gene[1:num_stops + 1] if p > 0])
-        return (num_stops, pit_laps)
-
-    def generate_initial_population(self, population_size: int, total_laps: int) -> List[List[int]]:
-        """
-        Generate initial population of random strategies with diverse pit windows.
-        """
-        population = []
-        strategies_created = set()
-
-        for _ in range(population_size):
-            # Vary strategy to create diversity
-            num_stops = random.randint(1, 3)
-            strategy_variant = random.randint(0, 2)  # Different pit timing philosophies
-
-            if num_stops == 1:
-                # 1-stop: varied pit windows
-                if strategy_variant == 0:
-                    # Early pit (aggressive)
-                    pit_lap = random.randint(int(total_laps * 0.25), int(total_laps * 0.4))
-                elif strategy_variant == 1:
-                    # Mid pit (balanced)
-                    pit_lap = random.randint(int(total_laps * 0.4), int(total_laps * 0.6))
-                else:
-                    # Late pit (conservative)
-                    pit_lap = random.randint(int(total_laps * 0.55), int(total_laps * 0.75))
-                pit_laps = [pit_lap]
-
-            elif num_stops == 2:
-                # 2-stop: varied split strategies
-                if strategy_variant == 0:
-                    # Early double pit
-                    pit1 = random.randint(int(total_laps * 0.2), int(total_laps * 0.35))
-                    pit2 = random.randint(int(total_laps * 0.55), int(total_laps * 0.7))
-                elif strategy_variant == 1:
-                    # Balanced double pit
-                    pit1 = random.randint(int(total_laps * 0.3), int(total_laps * 0.4))
-                    pit2 = random.randint(int(total_laps * 0.6), int(total_laps * 0.75))
-                else:
-                    # Late double pit
-                    pit1 = random.randint(int(total_laps * 0.35), int(total_laps * 0.48))
-                    pit2 = random.randint(int(total_laps * 0.65), int(total_laps * 0.8))
-                pit_laps = [pit1, pit2]
-
-            else:  # 3-stop
-                # 3-stop: varied triple pit strategies
-                if strategy_variant == 0:
-                    # Early triple pit strategy
-                    pit1 = random.randint(int(total_laps * 0.12), int(total_laps * 0.25))
-                    pit2 = random.randint(int(total_laps * 0.38), int(total_laps * 0.5))
-                    pit3 = random.randint(int(total_laps * 0.72), int(total_laps * 0.85))
-                elif strategy_variant == 1:
-                    # Balanced triple pit strategy
-                    pit1 = random.randint(int(total_laps * 0.15), int(total_laps * 0.28))
-                    pit2 = random.randint(int(total_laps * 0.45), int(total_laps * 0.58))
-                    pit3 = random.randint(int(total_laps * 0.7), int(total_laps * 0.85))
-                else:
-                    # Late first pit, then aggressive
-                    pit1 = random.randint(int(total_laps * 0.22), int(total_laps * 0.35))
-                    pit2 = random.randint(int(total_laps * 0.5), int(total_laps * 0.62))
-                    pit3 = random.randint(int(total_laps * 0.75), int(total_laps * 0.88))
-                pit_laps = [pit1, pit2, pit3]
-
-            gene = self.encode_strategy(num_stops, pit_laps)
-            gene_tuple = tuple(gene)
-
-            # Avoid duplicates
-            if gene_tuple not in strategies_created:
-                population.append(gene)
-                strategies_created.add(gene_tuple)
-
-        # Fill remaining population if we had duplicates
-        while len(population) < population_size:
-            num_stops = random.randint(1, 3)
-            min_gap = int(total_laps * 0.1)
-
-            if num_stops == 1:
-                pit_lap = random.randint(int(total_laps * 0.25), int(total_laps * 0.75))
-                pit_laps = [pit_lap]
-            elif num_stops == 2:
-                pit1 = random.randint(int(total_laps * 0.2), int(total_laps * 0.45))
-                pit2 = random.randint(pit1 + min_gap, int(total_laps * 0.8))
-                pit_laps = [pit1, pit2]
-            else:
-                pit1 = random.randint(int(total_laps * 0.12), int(total_laps * 0.35))
-                pit2 = random.randint(pit1 + min_gap, int(total_laps * 0.6))
-                pit3 = random.randint(pit2 + min_gap, int(total_laps * 0.88))
-                pit_laps = [pit1, pit2, pit3]
-
-            gene = self.encode_strategy(num_stops, pit_laps)
-            gene_tuple = tuple(gene)
-            if gene_tuple not in strategies_created:
-                population.append(gene)
-                strategies_created.add(gene_tuple)
-
-        return population
-
-    def mutate_gene(self, gene: List[int], total_laps: int, mutation_rate: float = 0.2) -> List[int]:
-        """
-        Apply mutation to a gene with varying severity.
-        """
-        mutated = gene.copy()
-
-        # Number of stops mutation
-        if random.random() < mutation_rate:
-            mutated[0] = max(1, min(3, mutated[0] + random.randint(-1, 1)))
-
-        # Pit lap time mutations with varied severity
-        for i in range(1, 4):
-            if random.random() < mutation_rate * 1.5 and mutated[0] >= i:
-                # 70% chance: small shift (±5-15 laps)
-                if random.random() < 0.7:
-                    shift = random.randint(-15, 15)
-                # 20% chance: medium shift (±20-40 laps)
-                elif random.random() < 0.67:
-                    shift = random.randint(-40, 40)
-                # 10% chance: large shift (±50-100 laps)
-                else:
-                    shift = random.randint(-100, 100)
-
-                mutated[i] = max(5, min(total_laps - 5, mutated[i] + shift))
-
-        return mutated
-
-    def crossover_genes(self, gene1: List[int], gene2: List[int]) -> Tuple[List[int], List[int]]:
-        """
-        Combine two genes to create offspring (single-point crossover).
-        """
-        crossover_point = random.randint(1, 3)
-
-        offspring1 = gene1[:crossover_point] + gene2[crossover_point:]
-        offspring2 = gene2[:crossover_point] + gene1[crossover_point:]
-
-        return (offspring1, offspring2)
 
     def evolve_strategies(
         self,
-        fitness_function: Callable[[int, List[int]], float],
+        fitness_function: Callable,
         total_laps: int,
         population_size: int = 20,
-        num_generations: int = 50,
+        num_generations: int = 30,
         elite_size: int = 4,
-        mutation_rate: float = 0.2
+        mutation_rate: float = 0.35
     ) -> Tuple[List[Dict], List[float]]:
-        """
-        Main genetic algorithm evolution loop.
+        
+        population = self._initialize_population(total_laps, population_size)
+        fitness_history = []
+        
+        # --- NEW: The Hall of Fame ---
+        # Tracks the absolute best pit timing for each unique tire sequence
+        hall_of_fame = {} 
 
-        Args:
-            fitness_function: Function that takes (num_stops, pit_laps) and returns total_time
-            total_laps: Total laps in race
-            population_size: Size of population to evolve
-            num_generations: Number of generations to evolve
-            elite_size: Number of top strategies to preserve each generation
-            mutation_rate: Probability of mutation per gene
-
-        Returns:
-            (evolved_strategies, fitness_history)
-            evolved_strategies: List of best strategies found
-            fitness_history: Best fitness per generation
-        """
-        population = self.generate_initial_population(population_size, total_laps)
-        best_fitness_history = []
-
-        print(f"\n--- Genetic Algorithm Optimization ---")
-        print(f"Population: {population_size}, Generations: {num_generations}\n")
+        print(f"GA: Starting evolution with population size {population_size} for {num_generations} generations")
 
         for generation in range(num_generations):
-            # Evaluate fitness
-            fitnesses = []
-            for gene in population:
-                num_stops, pit_laps = self.decode_strategy(gene, total_laps)
-                if pit_laps and len(pit_laps) <= 3:
-                    try:
-                        fitness = fitness_function(num_stops, pit_laps)
-                        fitnesses.append(fitness)
-                    except:
-                        fitnesses.append(float('inf'))
-                else:
-                    fitnesses.append(float('inf'))
+            fitness_scores = []
+            evaluated_population = []
 
-            # Sort by fitness (lower is better)
-            population_with_fitness = list(zip(population, fitnesses))
-            population_with_fitness.sort(key=lambda x: x[1])
+            for individual in population:
+                num_stops = individual['num_stops']
+                pit_laps = individual['pit_laps']
+                compounds = individual['compounds']
 
-            best_fitness = population_with_fitness[0][1]
-            best_fitness_history.append(best_fitness)
+                try:
+                    fitness = fitness_function(num_stops, pit_laps, compounds)
+                    fitness_scores.append(fitness)
+                    evaluated_population.append((individual, fitness))
+                    
+                    # --- NEW: Update Hall of Fame ---
+                    if fitness != float('inf'):
+                        comp_tuple = tuple(compounds)
+                        # If we've never seen this tire combo, or if this is the fastest version of it we've seen:
+                        if comp_tuple not in hall_of_fame or fitness < hall_of_fame[comp_tuple]['fitness']:
+                            hall_of_fame[comp_tuple] = {
+                                'num_stops': num_stops,
+                                'pit_laps': pit_laps.copy(),
+                                'compounds': compounds.copy(),
+                                'fitness': fitness
+                            }
 
-            avg_fitness = float(np.mean([f for f in fitnesses if f != float('inf')]))
-            print(f"Gen {generation + 1:3d}: Best Time = {best_fitness:7.2f}s | Avg = {avg_fitness:7.2f}s")
+                except Exception as e:
+                    fitness_scores.append(float('inf'))
+                    evaluated_population.append((individual, float('inf')))
 
-            if generation < num_generations - 1:
-                # Selection: take elite + select rest by tournament
-                elite = [gene for gene, _ in population_with_fitness[:elite_size]]
+            evaluated_population.sort(key=lambda x: x[1])
+            best_fitness = evaluated_population[0][1]
+            fitness_history.append(best_fitness)
 
-                population = elite.copy()
+            if generation % 10 == 0:
+                print(f"  Generation {generation}: Best fitness = {best_fitness:.2f}s")
 
-                # Tournament selection for remaining
-                while len(population) < population_size:
-                    # Select best of 3 random candidates
-                    candidates = random.sample(range(len(population_with_fitness)), min(3, len(population_with_fitness)))
-                    best_idx = min(candidates, key=lambda idx: population_with_fitness[idx][1])
-                    parent = population_with_fitness[best_idx][0].copy()
+            elite = [ind for ind, _ in evaluated_population[:elite_size]]
+            new_population = elite.copy()
 
-                    # Apply crossover with elite
-                    if random.random() < 0.8 and len(elite) > 1:
-                        elite_partner = random.choice(elite)
-                        child1, child2 = self.crossover_genes(parent, elite_partner)
-                        population.append(self.mutate_gene(child1, total_laps, mutation_rate))
-                    else:
-                        population.append(self.mutate_gene(parent, total_laps, mutation_rate))
+            while len(new_population) < population_size:
+                parent1 = self._tournament_selection(evaluated_population)
+                parent2 = self._tournament_selection(evaluated_population)
 
-        # Return top strategies
-        best_strategies = []
-        for gene, fitness in population_with_fitness[:5]:  # Top 5
-            num_stops, pit_laps = self.decode_strategy(gene, total_laps)
-            if pit_laps and len(pit_laps) <= 3:
-                best_strategies.append({
-                    'num_stops': num_stops,
-                    'pit_laps': pit_laps,
-                    'fitness': fitness,
-                    'gene': gene
-                })
+                child = self._crossover(parent1, parent2, total_laps)
 
-        print(f"\n[OK] Optimization complete. Top strategy: {best_fitness_history[-1]:.2f}s")
-        return best_strategies, best_fitness_history
+                if random.random() < mutation_rate:
+                    child = self._mutate(child, total_laps)
+
+                new_population.append(child)
+
+            population = new_population[:population_size]
+
+        # --- NEW: Extract best from Hall of Fame instead of final generation ---
+        # Sort the Hall of Fame by fitness (lowest time first)
+        best_strategies = sorted(hall_of_fame.values(), key=lambda x: x['fitness'])
+        
+        # Grab the top 5 distinct tire strategies
+        top_best_strategies = best_strategies[:5]
+
+        print(f"GA: Evolution complete. Found {len(hall_of_fame)} total valid tire combos.")
+        if top_best_strategies:
+            print(f"GA: Best fitness overall: {top_best_strategies[0]['fitness']:.2f}s")
+
+        return top_best_strategies, fitness_history
+
+    def _initialize_population(self, total_laps: int, population_size: int) -> List[Dict]:
+        population = []
+        for _ in range(population_size):
+            num_stops = random.choice([1, 2, 3])
+            pit_laps = sorted(random.sample(range(5, total_laps - 5), num_stops))
+            # Number of stints is always num_stops + 1
+            compounds = [random.choice(self.AVAILABLE_COMPOUNDS) for _ in range(num_stops + 1)]
+
+            population.append({
+                'num_stops': num_stops,
+                'pit_laps': pit_laps,
+                'compounds': compounds
+            })
+        return population
+
+    def _tournament_selection(self, evaluated_population: List[Tuple[Dict, float]], tournament_size: int = 3) -> Dict:
+        tournament = random.sample(evaluated_population, min(tournament_size, len(evaluated_population)))
+        winner = min(tournament, key=lambda x: x[1])
+        return winner[0].copy()
+
+    def _crossover(self, parent1: Dict, parent2: Dict, total_laps: int) -> Dict:
+        pit_laps1 = parent1['pit_laps']
+        pit_laps2 = parent2['pit_laps']
+        comp1 = parent1['compounds']
+        comp2 = parent2['compounds']
+
+        # Mix pit laps
+        if len(pit_laps1) > 0 and len(pit_laps2) > 0:
+            combined_pits = sorted(list(set(pit_laps1[:len(pit_laps1)//2]) | set(pit_laps2[len(pit_laps2)//2:])))
+            combined_pits = combined_pits[:3]
+        else:
+            combined_pits = pit_laps1 if len(pit_laps1) > len(pit_laps2) else pit_laps2
+            
+        num_stops = len(combined_pits)
+
+        # Mix compounds
+        combined_comps = comp1[:len(comp1)//2] + comp2[len(comp2)//2:]
+        # Ensure compound length exactly matches (num_stops + 1)
+        while len(combined_comps) < num_stops + 1:
+            combined_comps.append(random.choice(self.AVAILABLE_COMPOUNDS))
+        combined_comps = combined_comps[:num_stops + 1]
+
+        return {
+            'num_stops': num_stops,
+            'pit_laps': combined_pits,
+            'compounds': combined_comps
+        }
+
+    def _mutate(self, individual: Dict, total_laps: int) -> Dict:
+        pit_laps = individual['pit_laps'].copy()
+        compounds = individual['compounds'].copy()
+
+        # Added 'change_tire' as a mutation option
+        mutation_type = random.choice(['add', 'remove', 'shift', 'change_tire'])
+
+        if mutation_type == 'add' and len(pit_laps) < 3:
+            new_lap = random.randint(5, total_laps - 5)
+            pit_laps.append(new_lap)
+            pit_laps.sort()
+            compounds.append(random.choice(self.AVAILABLE_COMPOUNDS))
+            
+        elif mutation_type == 'remove' and len(pit_laps) > 1:
+            idx = random.randint(0, len(pit_laps) - 1)
+            pit_laps.pop(idx)
+            compounds.pop(idx) # Remove the tire compound for that stint
+            
+        elif mutation_type == 'shift' and len(pit_laps) > 0:
+            idx = random.randint(0, len(pit_laps) - 1)
+            new_lap = max(5, min(total_laps - 5, pit_laps[idx] + random.randint(-10, 10)))
+            pit_laps[idx] = new_lap
+            pit_laps.sort()
+            
+        elif mutation_type == 'change_tire':
+            # Swap a tire compound for a random stint
+            idx = random.randint(0, len(compounds) - 1)
+            current = compounds[idx]
+            others = [c for c in self.AVAILABLE_COMPOUNDS if c != current]
+            compounds[idx] = random.choice(others)
+
+        return {
+            'num_stops': len(pit_laps),
+            'pit_laps': pit_laps,
+            'compounds': compounds
+        }

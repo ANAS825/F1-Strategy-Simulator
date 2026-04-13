@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lap Visualizer - Standalone Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+    <link rel="stylesheet" href="lap-visualizer.css">
+    <script src="lap-visualizer.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1a1f3a 100%);
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .title {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #f1f5f9;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #cbd5e1;
+            font-size: 1.1rem;
+        }
+
+        .controls {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        label {
+            color: #cbd5e1;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        select, button {
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #f1f5f9;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        select:hover, button:hover {
+            border-color: #06b6d4;
+            background: #1a1f3a;
+        }
+
+        button {
+            background: #06b6d4;
+            color: #0f172a;
+            font-weight: 600;
+            border: none;
+        }
+
+        button:hover {
+            background: #0891b2;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .info-box {
+            background: #1e293b;
+            border-left: 4px solid #06b6d4;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #cbd5e1;
+        }
+
+        .info-box.success {
+            border-left-color: #10b981;
+            background: rgba(16, 185, 129, 0.05);
+        }
+
+        .info-box.warning {
+            border-left-color: #f59e0b;
+            background: rgba(245, 158, 11, 0.05);
+        }
+
+        code {
+            background: #0f172a;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #06b6d4;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .stat-label {
+            color: #94a3b8;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            color: #06b6d4;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">Lap Visualizer Component</div>
+            <div class="subtitle">Standalone Test & Demo</div>
+        </div>
+
+        <div class="info-box success">
+            ✅ This page demonstrates the <code>LapVisualizer</code> component working independently.
+            It uses sample F1 race data to show all features without requiring your backend API.
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>Sample Race:</label>
+                <select id="race-select">
+                    <option value="monaco">Monaco Grand Prix</option>
+                    <option value="monza">Italian Grand Prix</option>
+                    <option value="silverstone">British Grand Prix</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <button id="generate-btn">Generate Sample Data & Render</button>
+            </div>
+
+            <div class="control-group">
+                <button id="destroy-btn" disabled>Destroy Visualizer</button>
+            </div>
+        </div>
+
+        <div class="stats" id="stats-container" style="display: none;">
+            <div class="stat-card">
+                <div class="stat-label">Total Laps</div>
+                <div class="stat-value" id="stat-laps">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Time</div>
+                <div class="stat-value" id="stat-time">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Pit Stops</div>
+                <div class="stat-value" id="stat-pits">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Final Position</div>
+                <div class="stat-value" id="stat-position">-</div>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <strong>How to use in your project:</strong><br>
+            1. Copy <code>lap-visualizer.js</code> and <code>lap-visualizer.css</code> to your project<br>
+            2. Include them in your HTML: <code>&lt;link rel="stylesheet" href="lap-visualizer.css"&gt;</code> and <code>&lt;script src="lap-visualizer.js"&gt;&lt;/script&gt;</code><br>
+            3. Create a container: <code>&lt;div id="lap-visualizer-container"&gt;&lt;/div&gt;</code><br>
+            4. Initialize: <code>new LapVisualizer({containerId: 'lap-visualizer-container', data: results}).render()</code>
+        </div>
+
+        <!-- Visualizer Container -->
+        <div id="lap-visualizer-container"></div>
+    </div>
+
+    <script>
+        /**
+         * Standalone Test Page for Lap Visualizer
+         * Generates sample F1 race data to test the component
+         */
+
+        const raceConfigs = {
+            monaco: {
+                name: 'Monaco Grand Prix',
+                laps: 78,
+                driver: 'Max Verstappen',
+                baseTime: 78.5
+            },
+            monza: {
+                name: 'Italian Grand Prix',
+                laps: 53,
+                driver: 'Charles Leclerc',
+                baseTime: 130.2
+            },
+            silverstone: {
+                name: 'British Grand Prix',
+                laps: 52,
+                driver: 'Lewis Hamilton',
+                baseTime: 88.7
+            }
+        };
+
+        let visualizer = null;
+
+        /**
+         * Generate realistic sample data for a race
+         */
+        function generateSampleData(raceType) {
+            const config = raceConfigs[raceType];
+            const totalLaps = config.laps;
+
+            // Generate lap times with variation
+            const lapTimes = Array.from({ length: totalLaps }, (_, i) => {
+                const base = config.baseTime;
+                const lapsIn = i;
+
+                // Early laps are slower (tyre warm-up)
+                const warmupFactor = lapsIn < 5 ? 1 + (5 - lapsIn) * 0.02 : 1;
+
+                // Degredation over stint
+                const stint = Math.floor(lapsIn / 20);
+                const lapInStint = lapsIn % 20;
+                const degradation = 1 + (stint * 0.5) + (lapInStint * 0.01);
+
+                // Random variation
+                const variation = (Math.random() - 0.5) * 0.5;
+
+                return base * warmupFactor * degradation + variation;
+            });
+
+            // Generate fuel levels (consumption per lap)
+            const fuelLevels = Array.from({ length: totalLaps }, (_, i) => {
+                const consumption = 1.2 + (Math.random() * 0.3);
+                return Math.max(0, 120 - (i * consumption));
+            });
+
+            // Generate tyre ages (with pit stops)
+            const pitLaps = [20, 40, 60];
+            const tyreAges = Array.from({ length: totalLaps }, (_, i) => {
+                let age = i;
+                for (const pitLap of pitLaps) {
+                    if (i >= pitLap) age = i - pitLap;
+                }
+                return Math.max(0, age);
+            });
+
+            // Generate positions (some overtakes)
+            const positions = Array.from({ length: totalLaps }, (_, i) => {
+                const basePos = 2;
+                const variation = Math.sin(i / 10) * 2;
+                return Math.round(Math.max(1, basePos + variation));
+            });
+
+            // Calculate total time
+            const totalTime = lapTimes.reduce((a, b) => a + b, 0);
+
+            return {
+                driver_name: config.driver,
+                race_name: config.name,
+                total_time: totalTime,
+                final_position: positions[positions.length - 1],
+                lap_times: lapTimes,
+                fuel_levels: fuelLevels,
+                tyre_ages: tyreAges,
+                positions: positions,
+                pit_stops: pitLaps.map(lap => ({
+                    lap: lap,
+                    duration: 2.3 + Math.random() * 0.2
+                }))
+            };
+        }
+
+        /**
+         * Render the visualizer with sample data
+         */
+        function renderVisualizer() {
+            const raceType = document.getElementById('race-select').value;
+            const data = generateSampleData(raceType);
+
+            // Show stats
+            document.getElementById('stats-container').style.display = 'grid';
+            document.getElementById('stat-laps').textContent = data.lap_times.length;
+            document.getElementById('stat-time').textContent = data.total_time.toFixed(1) + 's';
+            document.getElementById('stat-pits').textContent = data.pit_stops.length;
+            document.getElementById('stat-position').textContent = data.final_position;
+
+            // Destroy existing visualizer
+            if (visualizer) {
+                visualizer.destroy();
+            }
+
+            // Create new visualizer
+            visualizer = new LapVisualizer({
+                containerId: 'lap-visualizer-container',
+                data: data,
+                onLapSelect: (lapData) => {
+                    console.log('Lap selected:', lapData);
+                }
+            });
+
+            // Render
+            visualizer.render();
+
+            // Update button states
+            document.getElementById('generate-btn').textContent = 'Regenerate Data';
+            document.getElementById('destroy-btn').disabled = false;
+
+            console.log('✅ Visualizer rendered successfully!');
+            console.log('Sample data:', data);
+        }
+
+        /**
+         * Destroy the visualizer
+         */
+        function destroyVisualizer() {
+            if (visualizer) {
+                visualizer.destroy();
+                visualizer = null;
+                document.getElementById('stats-container').style.display = 'none';
+                document.getElementById('destroy-btn').disabled = true;
+                console.log('✅ Visualizer destroyed');
+            }
+        }
+
+        // Event listeners
+        document.getElementById('generate-btn').addEventListener('click', renderVisualizer);
+        document.getElementById('destroy-btn').addEventListener('click', destroyVisualizer);
+        document.getElementById('race-select').addEventListener('change', () => {
+            if (visualizer) renderVisualizer();
+        });
+
+        // Show initial info
+        console.log('🏎️ Lap Visualizer Test Page Ready');
+        console.log('Click "Generate Sample Data & Render" to see the component in action');
+    </script>
+</body>
+</html>
