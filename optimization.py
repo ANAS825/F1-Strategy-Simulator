@@ -100,16 +100,26 @@ class StrategyGeneticOptimizer:
             population = new_population[:population_size]
 
         # Return best strategies found
-        best_strategies = [
-            {
-                'num_stops': ind['num_stops'],
-                'pit_laps': ind['pit_laps'],
-                'fitness': fitness
-            }
-            for ind, fitness in evaluated_population[:min(5, len(evaluated_population))]
-        ]
+        best_strategies = []
+        seen_pits = set()
+        
+        for ind, fitness in evaluated_population:
+            # Create a hashable tuple of the pit laps to check for uniqueness
+            pit_tuple = tuple(ind['pit_laps'])
+            
+            if pit_tuple not in seen_pits:
+                seen_pits.add(pit_tuple)
+                best_strategies.append({
+                    'num_stops': ind['num_stops'],
+                    'pit_laps': ind['pit_laps'],
+                    'fitness': fitness
+                })
+                
+            # Stop once we have our top 5 UNIQUE strategies
+            if len(best_strategies) >= 5:
+                break
 
-        print(f"GA: Evolution complete. Best fitness: {best_strategies[0]['fitness']:.2f}s")
+        print(f"GA: Evolution complete. Found {len(best_strategies)} unique top strategies. Best fitness: {best_strategies[0]['fitness']:.2f}s")
 
         return best_strategies, fitness_history
 
