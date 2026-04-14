@@ -167,10 +167,31 @@
         💡 Show Detailed Analysis
     </button>
 
-    <button type="button" id="btn-show-track" onclick="showTrackMap()" 
-        class="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold rounded-lg shadow-lg transition-all flex items-center gap-2 text-sm">
-        🗺️ View Track Layout
-    </button>
+    <button id="view-track-btn" class="bg-slate-700/50 hover:bg-slate-600 border border-slate-600/50 text-white rounded-lg px-4 py-2 transition text-sm font-semibold">
+    📍 View Track
+</button>
+
+<div id="track-map-modal" class="fixed inset-0 bg-black/80 z-50 hidden items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+    
+    <div class="bg-slate-800 rounded-xl border border-slate-700 shadow-2xl w-full max-w-4xl relative flex flex-col">
+        
+        <div class="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-800/80 rounded-t-xl">
+            <h3 class="text-white text-xl font-bold flex items-center gap-2" id="track-map-title">
+                📍 Track Layout
+            </h3>
+            
+            <button id="close-track-modal" class="text-slate-400 hover:text-white hover:bg-slate-700 p-2 rounded-lg transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="p-6">
+            <canvas id="track-canvas" width="800" height="400" class="w-full h-auto bg-slate-900 rounded-lg shadow-inner"></canvas>
+        </div>
+    </div>
+</div>
 
     <button type="button" id="btn-show-driver" onclick="showDriverInfo()" 
         class="px-4 py-2 bg-gradient-to-r from-blue-500 to-lightblue-500 hover:from-blue-600 hover:to-lightblue-600 text-white font-bold rounded-lg shadow-lg transition-all flex items-center gap-2 text-sm">
@@ -1189,42 +1210,95 @@
         }
     let trackChartInstance = null;
 
-async function showTrackMap() {
-    const raceName = document.getElementById('race_name').value;
+// Only expect raceName now
+async function showTrackMap(raceName) {
     if (!raceName) {
-        alert("Please select a race first.");
-        return;
+        console.error("Missing race name!");
+        return; 
     }
 
-    // Open modal and show loading state
-    document.getElementById('track-modal').classList.remove('hidden');
-    document.getElementById('track-loading').classList.remove('hidden');
-    document.getElementById('track-modal-title').innerText = `${raceName} Layout`;
-
     try {
-        const response = await fetch(`http://127.0.0.1:8000/api/track-layout/${encodeURIComponent(raceName)}`);
+        const response = await fetch(`/api/track-layout/${raceName}`);
+        
+        if (!response.ok) {
+            console.error(`API Error: ${response.status} - ${response.statusText}`);
+            return; 
+        }
+
         const data = await response.json();
 
-        if (data.error) {
-            alert("Sorry, track telemetry is not available for this circuit yet.");
-            closeTrackMap();
+        // 1. Combine X and Y arrays
+        const trackPoints = data.x.map((xCoord, index) => {
+            return { x: xCoord, y: data.y[index] };
+        });
+
+        // 2. Prepare the Canvas and Modal
+        const canvas = document.getElementById('track-canvas');
+        const modal = document.getElementById('track-map-modal'); // <-- Using modal now!
+        const title = document.getElementById('track-map-title');
+        
+        if (!canvas || !modal) {
+            console.error("Could not find the canvas or modal elements in the HTML!");
             return;
         }
 
-        // Format data for Chart.js scatter plot
-        const trackCoordinates = data.x.map((xVal, index) => ({
-            x: xVal,
-            y: data.y[index]
-        }));
+        const ctx = canvas.getContext('2d');
+        
+        // Show the modal and update the title
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        title.textContent = `📍 ${raceName.charAt(0).toUpperCase() + raceName.slice(1)} Layout`;
 
-        renderTrackChart(trackCoordinates);
+        // Clear any previous track drawings
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 3. Math to scale the track to fit inside the canvas perfectly
+        const minX = Math.min(...trackPoints.map(p => p.x));
+        const maxX = Math.max(...trackPoints.map(p => p.x));
+        const minY = Math.min(...trackPoints.map(p => p.y));
+        const maxY = Math.max(...trackPoints.map(p => p.y));
+
+        const trackWidth = maxX - minX;
+        const trackHeight = maxY - minY;
+
+        // Leave a 40px padding margin around the edges
+        const padding = 40; 
+        const scale = Math.min(
+            (canvas.width - padding * 2) / trackWidth,
+            (canvas.height - padding * 2) / trackHeight
+        );
+
+        // Center the map
+        const offsetX = (canvas.width - trackWidth * scale) / 2;
+        const offsetY = (canvas.height - trackHeight * scale) / 2;
+
+        // 4. Draw the geometry
+        ctx.beginPath();
+        ctx.strokeStyle = '#00d9ff'; // Cyan line
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        trackPoints.forEach((point, index) => {
+            // Apply scale and offset
+            const screenX = (point.x - minX) * scale + offsetX;
+            
+            // Subtract from canvas.height to flip the Y-axis!
+            const screenY = canvas.height - ((point.y - minY) * scale + offsetY); 
+
+            if (index === 0) {
+                ctx.moveTo(screenX, screenY);
+            } else {
+                ctx.lineTo(screenX, screenY);
+            }
+        });
+
+        // Close the loop (connect last point to first point)
+        ctx.closePath();
+        ctx.stroke();
 
     } catch (error) {
-        console.error("Error fetching track map:", error);
-        alert("Failed to load track map.");
-        closeTrackMap();
-    } finally {
-        document.getElementById('track-loading').classList.add('hidden');
+        console.error("Error fetching or drawing track map:", error);
     }
 }
 
@@ -1287,6 +1361,8 @@ async function showDriverInfo() {
     const modal = document.getElementById('driver-modal');
     const loading = document.getElementById('driver-loading');
     modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    title.innerHTML = `📍 ${raceName.charAt(0).toUpperCase() + raceName.slice(1)} Layout`;
     loading.classList.remove('hidden');
     window.closeDriverInfo = function() {
     const modal = document.getElementById('driver-modal');
@@ -1294,7 +1370,22 @@ async function showDriverInfo() {
         modal.classList.add('hidden');
     }
 };
+// 1. Close modal when clicking the 'X' button
+document.getElementById('close-track-modal').addEventListener('click', closeModal);
 
+// 2. Bonus: Close modal if the user clicks the dark background outside the box
+document.getElementById('track-map-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'track-map-modal') {
+        closeModal();
+    }
+});
+
+// Helper function to hide the modal
+function closeModal() {
+    const modal = document.getElementById('track-map-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
 // Bonus: Allow users to close the modal by clicking anywhere on the dark background
 document.addEventListener('click', function(event) {
     const modal = document.getElementById('driver-modal');
@@ -1335,6 +1426,85 @@ document.addEventListener('click', function(event) {
         loading.classList.add('hidden');
     }
 }
+async function loadApiData() {
+    const raceDropdown = document.getElementById('race_name');
+
+    try {
+        const response = await fetch('/api-data');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+
+        // Clear the "Loading races..." placeholder
+        raceDropdown.innerHTML = '<option value="" disabled selected>Select a race...</option>';
+
+        // Populate the dropdown with the races from your database
+        data.races.forEach(race => {
+            const option = document.createElement('option');
+            option.value = race; // This is the exact string your backend needs (e.g., 'bahrain')
+            
+            // Capitalize the first letter so it looks nice in the UI (e.g., 'Bahrain')
+            option.textContent = race.charAt(0).toUpperCase() + race.slice(1); 
+            
+            raceDropdown.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error("Failed to load races from API:", error);
+        raceDropdown.innerHTML = '<option value="" disabled selected>Error loading races.</option>';
+    }
+}
+
+// 2. Call the load function immediately when the script runs
+loadApiData();
+
+// 3. Attach the click listener to your "View Track" button
+// Assuming your button has an ID like this: <button id="view-track-btn">View Track</button>
+document.getElementById('view-track-btn').addEventListener('click', () => {
+    
+    // Grab the current value from the dropdown we just populated
+    const selectedRaceName = document.getElementById('race_name').value;
+
+    if (!selectedRaceName) {
+        alert("Please select a race from the dropdown first!");
+        return; 
+    }
+
+    // Pass it to your map function!
+    console.log("Fetching map for:", selectedRaceName);
+    showTrackMap(selectedRaceName);
+});
+// This guarantees the HTML is fully loaded before attaching the buttons
+document.addEventListener('DOMContentLoaded', () => {
+    
+    const closeBtn = document.getElementById('close-track-modal');
+    const modal = document.getElementById('track-map-modal');
+
+    // Make sure we actually found the elements before attaching listeners
+    if (closeBtn && modal) {
+        
+        // 1. Close when clicking the 'X' button
+        closeBtn.addEventListener('click', () => {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        });
+
+        // 2. Close when clicking the dark background outside the box
+        modal.addEventListener('click', (e) => {
+            if (e.target.id === 'track-map-modal') {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        });
+        
+        console.log("Modal close buttons successfully armed!");
+    } else {
+        console.error("Could not find the close button or modal HTML elements.");
+    }
+});
     </script>
 </body>
 

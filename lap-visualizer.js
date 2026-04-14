@@ -162,7 +162,6 @@ class LapVisualizer {
           <div class="lv-right-panel">
             <div class="lv-chart-card"><h3 class="lv-chart-title">🏁 Lap Performance</h3><canvas id="lv-chart-laptime" class="lv-chart"></canvas></div>
             <div class="lv-chart-card"><h3 class="lv-chart-title">⛽ Fuel & Tyre Management</h3><canvas id="lv-chart-fueltyre" class="lv-chart"></canvas></div>
-            <div class="lv-chart-card"><h3 class="lv-chart-title">📍 Position Evolution</h3><canvas id="lv-chart-position" class="lv-chart"></canvas></div>
           </div>
         </div>
 
@@ -239,7 +238,7 @@ class LapVisualizer {
   initializeCharts() {
     this.createLaptimeChart();
     this.createFuelTyreChart();
-    this.createPositionChart();
+    // this.createPositionChart();
   }
 
   createLaptimeChart() {
@@ -327,38 +326,38 @@ class LapVisualizer {
     });
   }
 
-  createPositionChart() {
-    if (this.charts.position) this.charts.position.destroy();
-    const ctx = document.getElementById('lv-chart-position').getContext('2d');
-    const positions = this.data.positions || [];
-    const labels = positions.map((_, i) => `L${i + 1}`);
+  // createPositionChart() {
+  //   if (this.charts.position) this.charts.position.destroy();
+  //   const ctx = document.getElementById('lv-chart-position').getContext('2d');
+  //   const positions = this.data.positions || [];
+  //   const labels = positions.map((_, i) => `L${i + 1}`);
 
-    this.charts.position = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [{
-          label: 'Position',
-          data: positions,
-          borderColor: '#a100f2',
-          backgroundColor: 'rgba(161, 0, 242, 0.1)',
-          borderWidth: 3,
-          fill: true,
-          tension: 0.4,
-          pointRadius: 2,
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: { legend: { labels: { color: '#cbd5e1' } } },
-        scales: {
-          y: { reverse: true, grid: { color: 'rgba(100, 116, 139, 0.1)' }, ticks: { color: '#cbd5e1' } },
-          x: { grid: { display: false }, ticks: { color: '#cbd5e1', maxTicksLimit: 10 } }
-        }
-      }
-    });
-  }
+  //   this.charts.position = new Chart(ctx, {
+  //     type: 'line',
+  //     data: {
+  //       labels,
+  //       datasets: [{
+  //         label: 'Position',
+  //         data: positions,
+  //         borderColor: '#a100f2',
+  //         backgroundColor: 'rgba(161, 0, 242, 0.1)',
+  //         borderWidth: 3,
+  //         fill: true,
+  //         tension: 0.4,
+  //         pointRadius: 2,
+  //       }]
+  //     },
+  //     options: {
+  //       responsive: true,
+  //       maintainAspectRatio: true,
+  //       plugins: { legend: { labels: { color: '#cbd5e1' } } },
+  //       scales: {
+  //         y: { reverse: true, grid: { color: 'rgba(100, 116, 139, 0.1)' }, ticks: { color: '#cbd5e1' } },
+  //         x: { grid: { display: false }, ticks: { color: '#cbd5e1', maxTicksLimit: 10 } }
+  //       }
+  //     }
+  //   });
+  // }
 
   updateDisplay() {
     const lapData = this.getLapData(this.currentLap);

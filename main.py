@@ -171,33 +171,47 @@ import fastf1 as ff1
 # Cache to store track maps in memory so subsequent clicks are instant
 TRACK_MAP_CACHE = {}
 
+# Change the route to only expect race_name
 @app.get("/api/track-layout/{race_name}")
 def get_track_layout(race_name: str):
-    """Fetches and caches the 2D X/Y coordinates of the track layout."""
-    if race_name in TRACK_MAP_CACHE:
-        return TRACK_MAP_CACHE[race_name]
+    
+    # 1. Hardcode the year internally so the frontend doesn't have to care about it
+    year = 2023 
+    
+    cache_key = f"{year}_{race_name.lower()}"
+    
+    if cache_key in TRACK_MAP_CACHE:
+        return TRACK_MAP_CACHE[cache_key]
         
     try:
-        # Enable cache to ensure fastf1 doesn't re-download data
         ff1.Cache.enable_cache('fastf1_cache') 
         
-        # Grab a recent qualifying session to get a clean lap
-        session = ff1.get_session(2023, race_name, 'Q') 
+        # FastF1 uses our internal 'year' variable
+        session = ff1.get_session(year, race_name, 'Q') 
         session.load(telemetry=True, weather=False, messages=False)
         
         fastest_lap = session.laps.pick_fastest()
         telemetry = fastest_lap.get_telemetry()
         
-        # Downsample: Take every 5th point to keep the payload lightweight
-        x_coords = telemetry['X'].iloc[::5].tolist()
-        y_coords = telemetry['Y'].iloc[::5].tolist()
+        clean_telemetry = telemetry.dropna(subset=['X', 'Y'])
         
-        TRACK_MAP_CACHE[race_name] = {"x": x_coords, "y": y_coords}
-        return TRACK_MAP_CACHE[race_name]
+        x_coords = clean_telemetry['X'].iloc[::2].tolist()
+        y_coords = clean_telemetry['Y'].iloc[::2].tolist()
+        
+        TRACK_MAP_CACHE[cache_key] = {
+            "x": x_coords, 
+            "y": y_coords,
+            "metadata": {
+                "driver": fastest_lap['Driver'],
+                "lap_time": str(fastest_lap['LapTime'])
+            }
+        }
+        
+        return TRACK_MAP_CACHE[cache_key]
         
     except Exception as e:
         print(f"Error loading track map for {race_name}: {e}")
-        return {"error": "Could not load track data"}
+        raise HTTPException(status_code=500, detail="Could not load track data")
     
 @app.get("/api/driver-info/{driver_input}")
 def get_driver_info_dynamic(driver_input: str):
